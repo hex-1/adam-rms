@@ -53,7 +53,7 @@ const readCases: ReadCase[] = [
   { endpoint: "/api/projects/list.php", params: () => ({}) },
   { endpoint: "/api/projects/data.php", params: (t) => ({ id: t.projectId }), shows: (t) => `${t.marker} project description` },
   { endpoint: "/api/projects/assets/statusList.php", params: (t) => ({ projects_id: t.projectId }), shows: (t) => `${t.marker} assignment comment` },
-  { endpoint: "/api/projects/assets/searchRequirementProducts.php", params: (t) => ({ projects_id: t.projectId, search: t.marker, page: 1 }), shows: (t) => `${t.marker} asset type` },
+  { endpoint: "/api/projects/assets/searchRequirementProducts.php", params: (t) => ({ projects_id: t.projectId, search: `${t.marker} asset type`, page: 1 }), shows: (t) => `${t.marker} asset type` },
   { endpoint: "/api/projects/crew/crewRoles/list.php", params: (t) => ({ projects_id: t.projectId }), shows: (t) => `${t.marker} vacancy` },
   { endpoint: "/api/projects/crew/crewRoles/applicationList.php", params: (t) => ({ projectsVacantRoles_id: t.vacantRoleId }), shows: (t) => `${t.marker} application` },
   { endpoint: "/api/projects/crew/searchUser.php", params: (t) => ({ projects_id: t.projectId, term: "E2E_TENANT" }) },

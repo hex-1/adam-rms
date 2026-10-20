@@ -65,6 +65,7 @@ test("finding and adding a planned product from the project asset browser", asyn
   const project = await newProject(asA, a, a.users.full.id, { start: "2036-07-01 09:00:00", end: "2036-07-02 18:00:00" });
 
   await page.goto(`/project/?id=${project}`);
+  await page.locator('a[href="#assets-view"]').click();
   await page.getByRole("button", { name: "Add Requirement" }).click();
   const modal = page.locator("#addAssetRequirementModal");
   await modal.locator("#addAssetRequirementSearch").fill(productPrefix);
