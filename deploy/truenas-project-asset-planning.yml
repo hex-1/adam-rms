@@ -1,0 +1,42 @@
+services:
+  db:
+    image: mysql:8.0
+    restart: unless-stopped
+    command:
+      - --default-authentication-plugin=mysql_native_password
+      - --innodb-thread-concurrency=0
+      - --sort_buffer_size=512K
+    environment:
+      MYSQL_DATABASE: adamrms_dev
+      MYSQL_USER: adamrms_dev
+      MYSQL_PASSWORD: CHANGE_ME_DATABASE_PASSWORD
+      MYSQL_ROOT_PASSWORD: CHANGE_ME_ROOT_PASSWORD
+    volumes:
+      - adamrms_dev_db_data:/var/lib/mysql
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - mysqladmin ping -h 127.0.0.1 -u root -p"$$MYSQL_ROOT_PASSWORD" --silent
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 30s
+
+  adamrms:
+    image: ghcr.io/hex-1/adam-rms:project-asset-planning
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DB_HOSTNAME: db
+      DB_DATABASE: adamrms_dev
+      DB_USERNAME: adamrms_dev
+      DB_PASSWORD: CHANGE_ME_DATABASE_PASSWORD
+      DB_PORT: 3306
+      DEV_MODE: "false"
+    ports:
+      - "30224:80"
+
+volumes:
+  adamrms_dev_db_data:
