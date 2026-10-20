@@ -12,13 +12,31 @@ $DBLIB->where("projects.projects_id", $_POST['projects_id']);
 $project = $DBLIB->getone("projects", ["projects_id","projects_dates_deliver_start","projects_dates_deliver_end","projects_defaultDiscount","projects_name"]);
 if (!$project) finish(false,["message"=>"Project not found"]);
 
+$requirement = null;
+// Dispatch can target either an existing requirement or just a section. A
+// section target lets free-scan create or extend the appropriate requirement.
+$selectedRequirementSectionId = filter_input(INPUT_POST, 'projectAssetRequirementSections_id', FILTER_VALIDATE_INT) ?: null;
+if ($selectedRequirementSectionId) {
+    $DBLIB->where('projectAssetRequirementSections_id', $selectedRequirementSectionId);
+    $DBLIB->where('projects_id', $project['projects_id']);
+    $DBLIB->where('projectAssetRequirementSections_deleted', 0);
+    if (!$DBLIB->getOne('projectAssetRequirementSections', ['projectAssetRequirementSections_id'])) finish(false, ['message' => 'Selected section not found']);
+}
+if (isset($_POST['projectAssetRequirements_id'])) {
+    $DBLIB->where('projectAssetRequirements_id', $_POST['projectAssetRequirements_id']);
+    $DBLIB->where('projects_id', $project['projects_id']);
+    $DBLIB->where('projectAssetRequirements_deleted', 0);
+    $requirement = $DBLIB->getOne('projectAssetRequirements', ['projectAssetRequirements_id', 'assetTypes_id']);
+    if (!$requirement) finish(false, ['message' => 'Planned asset not found']);
+}
+
 if ($project["projects_dates_deliver_start"] == null or $project["projects_dates_deliver_end"] == null or (strtotime($project["projects_dates_deliver_start"]) >= strtotime($project["projects_dates_deliver_end"]))) finish(false,["message"=>"Please set the dates for the project before attempting to assign assets"]);
 
 $projectFinanceHelper = new projectFinance();
 $projectFinanceCacher = new projectFinanceCacher($project['projects_id']);
 $priceMaths = $projectFinanceHelper->durationMaths($project['projects_id']);
 
-$assetRequiredFields = ["assetTypes_name","assets_tag","assets_id","assets_dayRate","assets_weekRate","assetTypes_dayRate","assetTypes_weekRate","assetTypes_mass","assetTypes_value","assets_value","assets_mass","assets_assetGroups"];
+$assetRequiredFields = ["assetTypes_name","assets.assetTypes_id","assets_tag","assets_id","assets_dayRate","assets_weekRate","assetTypes_dayRate","assetTypes_weekRate","assetTypes_mass","assetTypes_value","assets_value","assets_mass","assets_assetGroups"];
 
 if (isset($_POST['assetGroups_id'])) {
     $DBLIB->where("(users_userid IS NULL OR users_userid = '" . $AUTH->data['users_userid'] . "')");
@@ -66,6 +84,11 @@ foreach ($assetIDs as $asset) {
 $assetsFailed = [];
 $assetsProcessing = [];
 foreach ($assetsToProcess as $asset) {
+    // Linked accessories may be a different type; only the root asset fulfils
+    // the requirement selected by the operator.
+    if ($requirement && $asset['linkedto'] === false && (int) $asset['assetTypes_id'] !== (int) $requirement['assetTypes_id']) {
+        finish(false, ['message' => 'That physical asset is not the required Asset Type']);
+    }
     $DBLIB->where("assets_id", $asset['assets_id']);
     $DBLIB->where("assetsAssignments.assetsAssignments_deleted", 0);
     $DBLIB->join("projects", "assetsAssignments.projects_id=projects.projects_id", "LEFT");
@@ -80,6 +103,36 @@ foreach ($assetsToProcess as $asset) {
         if (isset($_POST['assets_id']) and $_POST['assets_id'] == $asset['assets_id']) finish(false,["message"=>"Asset wanted not available"]); //Fail because the one we were supposed to assign hasn't worked
         $assetsFailed[] = ["assets_id" => $asset['assets_id']];
     } else {
+        if (!$requirement && $selectedRequirementSectionId && $asset['linkedto'] === false) {
+            // Reuse the section's requirement until its planned quantity is
+            // full. Further free-scans deliberately increase that quantity.
+            $DBLIB->where('projects_id', $project['projects_id']);
+            $DBLIB->where('assetTypes_id', $asset['assetTypes_id']);
+            $DBLIB->where('projectAssetRequirementSections_id', $selectedRequirementSectionId);
+            $DBLIB->where('projectAssetRequirements_deleted', 0);
+            $requirement = $DBLIB->getOne('projectAssetRequirements', ['projectAssetRequirements_id', 'assetTypes_id', 'projectAssetRequirements_quantity']);
+            if ($requirement) {
+                $DBLIB->where('projectAssetRequirements_id', $requirement['projectAssetRequirements_id']);
+                $DBLIB->where('assetsAssignments_deleted', 0);
+                $assignedToRequirement = (int) $DBLIB->getValue('assetsAssignments', 'COUNT(assetsAssignments_id)');
+                if ($assignedToRequirement >= (int) $requirement['projectAssetRequirements_quantity']) {
+                    $requirement['projectAssetRequirements_quantity']++;
+                    $DBLIB->where('projectAssetRequirements_id', $requirement['projectAssetRequirements_id']);
+                    if (!$DBLIB->update('projectAssetRequirements', ['projectAssetRequirements_quantity' => $requirement['projectAssetRequirements_quantity']])) finish(false, ['message' => 'Could not increase planned quantity']);
+                }
+            } else {
+                $DBLIB->where('projects_id', $project['projects_id']);
+                $DBLIB->where('projectAssetRequirementSections_id', $selectedRequirementSectionId);
+                $rank = (int) $DBLIB->getValue('projectAssetRequirements', 'MAX(projectAssetRequirements_rank)') + 1;
+                $requirementId = $DBLIB->insert('projectAssetRequirements', [
+                    'projects_id' => $project['projects_id'], 'assetTypes_id' => $asset['assetTypes_id'],
+                    'projectAssetRequirements_quantity' => 1, 'projectAssetRequirementSections_id' => $selectedRequirementSectionId,
+                    'projectAssetRequirements_rank' => $rank, 'projectAssetRequirements_deleted' => 0,
+                ]);
+                if (!$requirementId) finish(false, ['message' => 'Could not create planned requirement']);
+                $requirement = ['projectAssetRequirements_id' => $requirementId, 'assetTypes_id' => $asset['assetTypes_id']];
+            }
+        }
         $insertData = [
             "projects_id" => $project['projects_id'],
             "assets_id" => $asset['assets_id'],
@@ -88,6 +141,13 @@ foreach ($assetsToProcess as $asset) {
             "assetsAssignments_linkedTo" => ($asset['linkedto'] !== false ? $assetsProcessing[$asset['linkedto']]['insertedid'] : null),
             "assetsAssignments_discount" => ($asset['linkedto'] !== false ? $AUTH->data['instance']['instances_config_linkedDefaultDiscount'] : $project['projects_defaultDiscount'])
         ];
+        if ($requirement && $asset['linkedto'] === false) {
+            // Keep the planning note with the physical assignment so warehouse
+            // instructions survive once a particular unit has been chosen.
+            $insertData['projectAssetRequirements_id'] = $requirement['projectAssetRequirements_id'];
+            $DBLIB->where('projectAssetRequirements_id', $requirement['projectAssetRequirements_id']);
+            $insertData['assetsAssignments_comment'] = $DBLIB->getValue('projectAssetRequirements', 'projectAssetRequirements_note');
+        }
         $insert = $DBLIB->insert("assetsAssignments", $insertData);
         if ($insert) {
             //Calculate the maths changes needed for this assignment and add it to the project

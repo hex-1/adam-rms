@@ -34,7 +34,7 @@
 <div class="card card-primary card-outline card-outline-tabs">
     <div class="card-header p-0 border-bottom-0 card-tabs">
         <ul class="nav nav-tabs" id="asset-list-tabs-tab" role="tablist">
-            {% if FINANCIALS.assetsAssigned|length > 0 %}
+            {% if FINANCIALS.assetsAssigned|length > 0 or project.assetRequirements|length > 0 %}
                 <li class="nav-item">
                     <a class="nav-link active assetsBoardToggle" id="asset-board-tab-thisinstance" data-toggle="pill" href="#asset-board-thisinstance" role="tab" aria-controls="asset-board-thisinstance" aria-selected="false">{{ USERDATA.instance.instances_name }}</a>
                 </li>
@@ -44,12 +44,14 @@
                     <a class="nav-link assetsBoardToggle" id="asset-board-tab-instance{{ instance['instance'].instances_id }}" data-toggle="pill" href="#asset-board-instance{{ instance['instance'].instances_id }}" role="tab" aria-controls="asset-board-instance{{ instance['instance'].instances_id }}" aria-selected="false">{{  instance['instance'].instances_name }} Assets</a>
                 </li>
             {% endfor %}
-            {% if (FINANCIALS.assetsAssigned|length > 0 or FINANCIALS.assetsAssignedSUB|length > 0) and "PROJECTS:PROJECT_ASSETS:EDIT:ASSIGNMENT_STATUS"|instancePermissions %}
+            {% if (project.assetRequirements|length > 0 or FINANCIALS.assetsAssigned|length > 0 or FINANCIALS.assetsAssignedSUB|length > 0) and "PROJECTS:PROJECT_ASSETS:EDIT:ASSIGNMENT_STATUS"|instancePermissions %}
                 <li class="nav-item" id="navItemQuickDispatch">
                     <button type="button" class="nav-link" title="Quick Dispatch" data-toggle="modal" data-target="#quickDispatchModal">
                         <i class="fas fas fa-shipping-fast"></i>
                     </button>
                 </li>
+            {% endif %}
+            {% if (project.assetRequirements|length > 0 or FINANCIALS.assetsAssigned|length > 0 or FINANCIALS.assetsAssignedSUB|length > 0) and "PROJECTS:PROJECT_ASSETS:EDIT:ASSIGNMENT_STATUS"|instancePermissions %}
                 <li class="nav-item" id="navItemBarcodeDispatch">
                     <button type="button" class="nav-link" title="Barcode Dispatch" data-toggle="modal" data-target="#barcodeDispatchModal">
                         <i class="fas fa-barcode"></i>
@@ -85,7 +87,7 @@
             </div>
             <div class="modal-body p-0">
                 <ul class="nav nav-tabs" role="tablist">
-                    {% if FINANCIALS.assetsAssigned|length > 0 %}
+                    {% if FINANCIALS.assetsAssigned|length > 0 or project.assetRequirements|length > 0 %}
                         <li class="nav-item">
                             <a class="nav-link active" data-toggle="pill" href="#quick-dispatch-modal-board-thisinstance" role="tab" aria-controls="quick-dispatch-modal-board-thisinstance" aria-selected="false">{{ USERDATA.instance.instances_name }}</a>
                         </li>
@@ -123,8 +125,24 @@
                         </div>
                         {% endfor %}
                     </div>                
+                    {% if "PROJECTS:PROJECT_ASSETS:CREATE:ASSIGN_AND_UNASSIGN"|instancePermissions %}
+                    <div class="custom-control custom-switch mb-3">
+                        <input type="checkbox" class="custom-control-input" id="quickDispatchFreeScan">
+                        <label class="custom-control-label" for="quickDispatchFreeScan">
+                            Free Scan
+                            <small class="text-muted d-block">Allow assets that are not in the planned requirements to be added to this project.</small>
+                        </label>
+                    </div>
                     <div class="form-group">
-                        <label>Asset Tag</label>
+                        <label for="quickDispatchSection">Place newly added items under</label>
+                        <select class="form-control" id="quickDispatchSection">
+                            <option value="">Automatic placement</option>
+                            {% for section in project.assetRequirementSectionOptions %}<option value="{{ section.id }}">{{ section.path }}</option>{% endfor %}
+                        </select>
+                    </div>
+                    {% endif %}
+                    <div class="form-group">
+                        <label>Asset Tag or Barcode</label>
                         <div class="input-group">
                             <input type="text" class="form-control" id="assetTagQuickDispatch" />
                             <div class="input-group-append">
@@ -151,7 +169,7 @@
             </div>
             <div class="modal-body">
                 <ul class="nav nav-tabs" role="tablist">
-                    {% if FINANCIALS.assetsAssigned|length > 0 %}
+                    {% if FINANCIALS.assetsAssigned|length > 0 or project.assetRequirements|length > 0 %}
                         <li class="nav-item">
                             <a class="nav-link active" data-toggle="pill" href="#barcode-dispatch-modal-board-thisinstance" role="tab" aria-controls="barcode-dispatch-modal-board-thisinstance" aria-selected="true">{{ USERDATA.instance.instances_name }}</a>
                         </li>
@@ -164,7 +182,7 @@
                 </ul>
                 <div class="p-3">
                     <div class="tab-content">
-                        {% if FINANCIALS.assetsAssigned|length > 0 %}
+                        {% if FINANCIALS.assetsAssigned|length > 0 or project.assetRequirements|length > 0 %}
                         <div class="tab-pane show active p2" id="barcode-dispatch-modal-board-thisinstance" role="tabpanel">
                             <p>Scan a barcode for an asset from {{ USERDATA.instance.instances_name }} to set its status.</p>
                             <div class="form-group">
@@ -191,6 +209,22 @@
                         </div>
                         {% endfor %}
                     </div>
+                    {% if "PROJECTS:PROJECT_ASSETS:CREATE:ASSIGN_AND_UNASSIGN"|instancePermissions %}
+                    <div class="custom-control custom-switch mb-3">
+                        <input type="checkbox" class="custom-control-input" id="barcodeDispatchFreeScan">
+                        <label class="custom-control-label" for="barcodeDispatchFreeScan">
+                            Free Scan
+                            <small class="text-muted d-block">Allow assets that are not in the planned requirements to be added to this project.</small>
+                        </label>
+                    </div>
+                    <div class="form-group">
+                        <label for="barcodeDispatchSection">Place newly added items under</label>
+                        <select class="form-control" id="barcodeDispatchSection">
+                            <option value="">Automatic placement</option>
+                            {% for section in project.assetRequirementSectionOptions %}<option value="{{ section.id }}">{{ section.path }}</option>{% endfor %}
+                        </select>
+                    </div>
+                    {% endif %}
                     {% embed 'assets/widgets/barcodeScanner.twig' with {"scannerCallback": "dispatchBarcodeScanned", "scannerIdSuffix": "Dispatch"} %}
                     {% endembed %}
                     <div id="barcodeDispatchResult"></div>
@@ -216,6 +250,40 @@
 
     // Whether the user can assign assets to projects (for Supermarket Sweep)
     const canAssignAssets = {{ "PROJECTS:PROJECT_ASSETS:CREATE:ASSIGN_AND_UNASSIGN"|instancePermissions ? 'true' : 'false' }};
+    var barcodeDispatchNeedsRefresh = false;
+
+    function playNegativeScanSound() {
+        try {
+            const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+            const context = new AudioContextClass();
+            const oscillator = context.createOscillator();
+            const gain = context.createGain();
+            oscillator.type = 'sine';
+            oscillator.frequency.setValueAtTime(220, context.currentTime);
+            oscillator.frequency.exponentialRampToValueAtTime(80, context.currentTime + 0.28);
+            gain.gain.setValueAtTime(0.25, context.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.01, context.currentTime + 0.3);
+            oscillator.connect(gain);
+            gain.connect(context.destination);
+            oscillator.start();
+            oscillator.stop(context.currentTime + 0.3);
+            oscillator.onended = function () { context.close(); };
+        } catch (error) {
+            console.warn('Could not play scan rejection sound', error);
+        }
+    }
+
+    function showBarcodeDispatchError(value, message, resultTarget) {
+        resultTarget = resultTarget || '#barcodeDispatchResult';
+        playNegativeScanSound();
+        Toast.fire({ type: 'error', title: value + ': ' + message });
+        const resultDiv = $('<div>')
+            .addClass('alert alert-danger py-2 mb-2')
+            .text(value + ': ' + message)
+            .delay(5000)
+            .fadeOut(500, function () { $(this).remove(); });
+        $(resultTarget).prepend(resultDiv);
+    }
 
     // Create an array of status ids, ordered
     const assetStatusesRaw = JSON.parse('{{ BOARDSTATUSES|json_encode|raw }}');
@@ -276,7 +344,8 @@
             text: value,
             assetsAssignments_status: assetStatus,
             projects_id: {{ project.projects_id }},
-            instances_id: instanceId
+            instances_id: instanceId,
+            freeScan: $('#barcodeDispatchFreeScan').is(':checked') ? '1' : '0'
         };
         if (type && type !== "UNKNOWN") {
             requestData.type = type;
@@ -291,28 +360,24 @@
                     var assetCard = $(".assetDispatchAssetList[data-instance=" + instanceId + "] .assetDispatchAssetList-card[data-asset=" + result.response.assets_id + "]");
                     assetCard.detach().appendTo(".assetDispatchAssetList[data-statusid=" + assetStatus + "][data-instance=" + instanceId + "]");
                     drawButtons();
+                    barcodeDispatchNeedsRefresh = true;
                     Toast.fire({
                         type: 'success',
                         title: 'Asset dispatched via barcode'
                     });
                 } else if (result.error && result.error.code === "NOTASSIGNED" && ('assets_id' in result.error) && canAssignAssets) {
-                    // Supermarket Sweep: asset exists but is not assigned to this project
-                    // Prevent multiple concurrent NOTASSIGNED flows (scanner may fire repeatedly)
+                    // Required assets, or any asset in Free Scan mode, are assigned immediately.
                     if (window.barcodeAssignInProgress) {
                         return;
                     }
                     window.barcodeAssignInProgress = true;
-                    bootbox.confirm({
-                        title: "Add asset to project?",
-                        message: "This asset is not currently assigned to this project. Would you like to add it to the project and set its status?",
-                        callback: function(confirmed) {
-                            if (confirmed) {
-                                $.ajax({
+                    $.ajax({
                                     url: "{{ CONFIG.ROOTURL }}/api/projects/assets/assign.php",
                                     type: "POST",
                                     data: {
                                         projects_id: {{ project.projects_id }},
-                                        assets_id: result.error.assets_id
+                                        assets_id: result.error.assets_id,
+                                        projectAssetRequirementSections_id: $('#barcodeDispatchSection').val()
                                     },
                                     cache: false,
                                     success: function(assignResult) {
@@ -329,18 +394,15 @@
                                                             type: 'success',
                                                             title: 'Asset added to project and dispatched via barcode'
                                                         });
-                                                        // Clear in-progress flag before reload
                                                         window.barcodeAssignInProgress = false;
-                                                        // Reload to show the newly assigned asset on the board
-                                                        location.reload();
+                                                        barcodeDispatchNeedsRefresh = true;
                                                     } else {
-                                                        // Assignment succeeded but status change failed
                                                         Toast.fire({
                                                             type: 'warning',
                                                             title: 'Asset added to project but status could not be updated'
                                                         });
                                                         window.barcodeAssignInProgress = false;
-                                                        location.reload();
+                                                        barcodeDispatchNeedsRefresh = true;
                                                     }
                                                 },
                                                 error: function() {
@@ -349,17 +411,12 @@
                                                         title: 'Asset added to project but status could not be updated'
                                                     });
                                                     window.barcodeAssignInProgress = false;
-                                                    location.reload();
+                                                    barcodeDispatchNeedsRefresh = true;
                                                 }
                                             });
                                         } else {
                                             var assignErrorMsg = assignResult.error ? assignResult.error.message : "Could not assign asset to project";
-                                            Toast.fire({
-                                                type: 'error',
-                                                title: value + ": " + assignErrorMsg
-                                            });
-                                            var resultDiv = $("<div>").addClass("alert alert-danger").text(value + ": " + assignErrorMsg);
-                                            $("#barcodeDispatchResult").prepend(resultDiv);
+                                            showBarcodeDispatchError(value, assignErrorMsg);
                                             window.barcodeAssignInProgress = false;
                                         }
                                     },
@@ -368,26 +425,9 @@
                                         bootbox.alert('Sorry we couldn\'t connect to the internet - please check your connection');
                                     }
                                 });
-                            } else {
-                                // User cancelled - show the original error so it's clear nothing changed
-                                Toast.fire({
-                                    type: 'info',
-                                    title: 'Asset not added to project'
-                                });
-                                var resultDiv = $("<div>").addClass("alert alert-warning").text(value + ": Asset not assigned to project - skipped");
-                                $("#barcodeDispatchResult").prepend(resultDiv);
-                                window.barcodeAssignInProgress = false;
-                            }
-                        }
-                    });
                 } else {
                     var errorMsg = (result.error && result.error.message) ? result.error.message : "Barcode not found or asset not assigned to project";
-                    Toast.fire({
-                        type: 'error',
-                        title: value + ": " + errorMsg
-                    });
-                    var resultDiv = $("<div>").addClass("alert alert-danger").text(value + ": " + errorMsg);
-                    $("#barcodeDispatchResult").prepend(resultDiv);
+                    showBarcodeDispatchError(value, errorMsg);
                 }
             },
             error: function (jqXHR, textStatus, errorThrown) {
@@ -401,7 +441,15 @@
     {% endif %}
     $(document).ready(function () {
         {% if "PROJECTS:PROJECT_ASSETS:EDIT:ASSIGNMENT_STATUS"|instancePermissions %}
+        // Keep the shared dispatch modals outside tab panes so Assets List shortcuts can open them.
+        $('#quickDispatchModal, #barcodeDispatchModal').appendTo(document.body);
         drawButtons();
+        $('#barcodeDispatchModal').on('hidden.bs.modal', function () {
+            if (barcodeDispatchNeedsRefresh) location.reload();
+        });
+        $('#quickDispatchModal').on('hidden.bs.modal', function () {
+            if (barcodeDispatchNeedsRefresh) location.reload();
+        });
         $(".assetDispatchAssetList").sortable({
             connectWith: "div",
             update: function( event, ui ){
@@ -433,35 +481,84 @@
 
         function doQuickDispatch() {
             const assetTag = $("#assetTagQuickDispatch").val();
+            if (!assetTag || window.quickDispatchInProgress) return;
             const assetStatus = $(".assetStatusSelectorQuickDispatch:visible").val();
             const instanceId = $(".assetStatusSelectorQuickDispatch:visible").data("instanceid");
+            const requestData = {
+                text: assetTag,
+                assetsAssignments_status: assetStatus,
+                projects_id: {{ project.projects_id }},
+                freeScan: $('#quickDispatchFreeScan').is(':checked') ? '1' : '0'
+            };
+            window.quickDispatchInProgress = true;
             // Not using ajaxcall so we can have our own error handling for the alert boxes
             $.ajax({
                 url: "{{ CONFIG.ROOTURL }}/api/projects/assets/setStatusByTag.php",
                 type: "POST",
-                data: {
-                    text: assetTag,
-                    assetsAssignments_status: assetStatus,
-                    projects_id: {{ project.projects_id }},
-                },
+                data: requestData,
                 cache: false,
                 success: function(result, status, data) {
                     if (result.result === true) {
                         const assetCard = $(".assetDispatchAssetList[data-instance=" + instanceId + "] .assetDispatchAssetList-card[data-asset=" + result.response.assets_id + "]");
                         assetCard.detach().appendTo(".assetDispatchAssetList[data-statusid=" + assetStatus + "][data-instance=" + instanceId + "]");
                         drawButtons();
-                    } else {
-                        Toast.fire({
-                            type: 'error',
-                            title: assetTag + ": " + result.error.message
+                        barcodeDispatchNeedsRefresh = true;
+                        window.quickDispatchInProgress = false;
+                    } else if (result.error && result.error.code === 'NOTASSIGNED' && result.error.assets_id && canAssignAssets) {
+                        $.ajax({
+                            url: "{{ CONFIG.ROOTURL }}/api/projects/assets/assign.php",
+                            type: "POST",
+                            data: { projects_id: {{ project.projects_id }}, assets_id: result.error.assets_id, projectAssetRequirementSections_id: $('#quickDispatchSection').val() },
+                            cache: false,
+                            success: function (assignResult) {
+                                if (assignResult.result === true) {
+                                    $.ajax({
+                                        url: "{{ CONFIG.ROOTURL }}/api/projects/assets/setStatusByTag.php",
+                                        type: "POST",
+                                        data: requestData,
+                                        cache: false,
+                                        success: function (retryResult) {
+                                            if (retryResult.result === true) {
+                                                Toast.fire({ type: 'success', title: assetTag + ': added to project' });
+                                                barcodeDispatchNeedsRefresh = true;
+                                            } else {
+                                                showBarcodeDispatchError(assetTag, 'Asset added, but its status could not be updated', '#assetTagResultQuickDispatch');
+                                                barcodeDispatchNeedsRefresh = true;
+                                            }
+                                            window.quickDispatchInProgress = false;
+                                        },
+                                        error: function () {
+                                            showBarcodeDispatchError(assetTag, 'Asset added, but its status could not be updated', '#assetTagResultQuickDispatch');
+                                            barcodeDispatchNeedsRefresh = true;
+                                            window.quickDispatchInProgress = false;
+                                        }
+                                    });
+                                } else {
+                                    showBarcodeDispatchError(assetTag, assignResult.error ? assignResult.error.message : 'Could not assign asset to project', '#assetTagResultQuickDispatch');
+                                    window.quickDispatchInProgress = false;
+                                }
+                            },
+                            error: function () {
+                                showBarcodeDispatchError(assetTag, 'Connection error', '#assetTagResultQuickDispatch');
+                                window.quickDispatchInProgress = false;
+                            }
                         });
-                        const resultDiv = $("<div>").addClass("alert alert-danger").text(assetTag + ": " + result.error.message);
-                        $("#assetTagResultQuickDispatch").prepend(resultDiv);
+                    } else {
+                        playNegativeScanSound();
+                        Toast.fire({ type: 'error', title: assetTag + ': ' + result.error.message });
+                        const resultDiv = $('<div>')
+                            .addClass('alert alert-danger py-2 mb-2')
+                            .text(assetTag + ': ' + result.error.message)
+                            .delay(5000)
+                            .fadeOut(500, function () { $(this).remove(); });
+                        $('#assetTagResultQuickDispatch').prepend(resultDiv);
+                        window.quickDispatchInProgress = false;
                     }
                     $("#assetTagQuickDispatch").val("");
                     $("#assetTagQuickDispatch").focus();
                 },
                 error: function (jqXHR, textStatus, errorThrown) {
+                    window.quickDispatchInProgress = false;
                     console.log(jqXHR, textStatus, errorThrown);
                     console.log("Connection Error");
                     bootbox.alert('Sorry we couldn\'t connect to the internet - please check your connection', function () {

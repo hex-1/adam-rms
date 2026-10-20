@@ -74,7 +74,10 @@ class assetAssignmentSelector
         $DBLIB->join("projects", "assetsAssignments.projects_id=projects.projects_id", "LEFT");
         $DBLIB->join("assets", "assetsAssignments.assets_id=assets.assets_id","LEFT");
         $DBLIB->join("assetTypes","assets.assetTypes_id=assetTypes.assetTypes_id", "LEFT");
-        $assignments = $DBLIB->get("assetsAssignments", null, ["assetsAssignments_id", "assetsAssignments.projects_id","assetsAssignments.assetsAssignments_discount","assetsAssignments.assetsAssignments_customPrice","projects.projects_id","assetsAssignments.assets_id","assets.assets_dayRate","assets.assets_weekRate","assetTypes_dayRate","assetTypes_weekRate","assetTypes_mass","assetTypes_value","assets.assets_value","assets.assets_mass","assetTypes.assetTypes_name","assets.assets_tag","assets.assets_assetGroups"]);
+        // Include the workflow state here because the project outline uses this
+        // shared selector to calculate packed totals as well as financials.
+        $DBLIB->join("assetsAssignmentsStatus", "assetsAssignments.assetsAssignmentsStatus_id=assetsAssignmentsStatus.assetsAssignmentsStatus_id", "LEFT");
+        $assignments = $DBLIB->get("assetsAssignments", null, ["assetsAssignments_id", "assetsAssignments.projects_id","assetsAssignments.assetsAssignments_discount","assetsAssignments.assetsAssignments_customPrice","projects.projects_id","assetsAssignments.assets_id","assets.assets_dayRate","assets.assets_weekRate","assetTypes_dayRate","assetTypes_weekRate","assetTypes_mass","assetTypes_value","assets.assets_value","assets.assets_mass","assetTypes.assetTypes_name","assets.assets_tag","assets.assets_assetGroups","assetsAssignmentsStatus.assetsAssignmentsStatus_name","assetsAssignmentsStatus.assetsAssignmentsStatus_order","assetsAssignmentsStatus.instances_id AS status_instances_id"]);
         if (!$assignments) return false;
         foreach ($assignments as $assignment) {
             $this->projectid = $assignment['projects_id'];

@@ -21,11 +21,28 @@ $DBLIB->where("projects_dates_deliver_start",NULL,"IS NOT");
 $DBLIB->where("projects_dates_deliver_end",NULL,"IS NOT");
 $DBLIB->join("assetsAssignments", "assetsAssignments.assets_id = assets.assets_id");
 $DBLIB->join("projects", "assetsAssignments.projects_id = projects.projects_id");
+$DBLIB->join("assetsAssignmentsStatus", "assetsAssignments.assetsAssignmentsStatus_id = assetsAssignmentsStatus.assetsAssignmentsStatus_id", "LEFT");
 $DBLIB->where("projects.projects_deleted", 0);
 $DBLIB->where("projects.projects_archived", 0);
 $DBLIB->where('assets_deleted', 0);
-$currentAsset = $DBLIB->getone("assets");
+$currentAsset = $DBLIB->getone("assets", [
+    'assets.*', 'assetsAssignments.assetsAssignments_id', 'assetsAssignments.assetsAssignments_linkedTo',
+    'assetsAssignmentsStatus.assetsAssignmentsStatus_name', 'assetsAssignmentsStatus.assetsAssignmentsStatus_order',
+    'projects.projects_dates_deliver_start', 'projects.projects_dates_deliver_end',
+]);
 if (!$currentAsset) finish(false);
+if ($currentAsset['assetsAssignments_linkedTo']) finish(false, ['message' => 'Linked accessories must be managed through their parent asset']);
+
+$DBLIB->where('instances_id', $currentAsset['instances_id']);
+$DBLIB->where('assetsAssignmentsStatus_deleted', 0);
+$DBLIB->where('LOWER(assetsAssignmentsStatus_name)', 'packed');
+$packedOrder = $DBLIB->getValue('assetsAssignmentsStatus', 'assetsAssignmentsStatus_order');
+if (
+    strtolower((string) ($currentAsset['assetsAssignmentsStatus_name'] ?? '')) === 'packed'
+    || ($currentAsset['assetsAssignmentsStatus_order'] !== null && $packedOrder !== null && (int) $currentAsset['assetsAssignmentsStatus_order'] >= (int) $packedOrder)
+) {
+    finish(false, ['message' => 'Packed assets, or assets beyond Packed, cannot be replaced']);
+}
 
 // Check Asset is free and available
 $DBLIB->where("assets.assets_id", $_POST['assets_id']);

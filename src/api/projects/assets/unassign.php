@@ -28,6 +28,11 @@ if (isset($_POST['assetTypes_id']) and isset($_POST['projects_id']) and !isset($
     else finish(false, ["message" => "Could not find Assignment"]);
 }
 
+$DBLIB->where('assetsAssignments_id', $_POST['assetsAssignments'], 'IN');
+$DBLIB->where('assetsAssignments_linkedTo', null, 'IS NOT');
+$directLinkedAssignment = $DBLIB->getOne('assetsAssignments', ['assetsAssignments_id']);
+if ($directLinkedAssignment) finish(false, ['message' => 'Linked accessories must be managed through their parent asset']);
+
 $assignmentsRemove = new assetAssignmentSelector($_POST['assetsAssignments']);
 $assignmentsRemove = $assignmentsRemove->getData();
 if (!$assignmentsRemove['projectid']) finish(false, ["message" => "Cannot find projectid"]);
@@ -36,6 +41,21 @@ $DBLIB->where("projects.instances_id", $AUTH->data['instance_ids'], 'IN');
 $DBLIB->where("projects.projects_deleted", 0);
 $project = $DBLIB->getone("projects", ["projects_id", "projects_name"]);
 if (!$project) finish(false, ["message" => "Cannot find project"]);
+
+$DBLIB->where('instances_id', $AUTH->data['instance_ids'], 'IN');
+$DBLIB->where('assetsAssignmentsStatus_deleted', 0);
+$DBLIB->where('LOWER(assetsAssignmentsStatus_name)', 'packed');
+$packedStatuses = $DBLIB->get('assetsAssignmentsStatus', null, ['instances_id', 'assetsAssignmentsStatus_order']);
+$packedOrderByInstance = [];
+foreach ($packedStatuses as $packedStatus) $packedOrderByInstance[(int) $packedStatus['instances_id']] = (int) $packedStatus['assetsAssignmentsStatus_order'];
+foreach ($assignmentsRemove['assignments'] as $assignment) {
+    $statusName = strtolower((string) ($assignment['assetsAssignmentsStatus_name'] ?? ''));
+    $statusOrder = $assignment['assetsAssignmentsStatus_order'];
+    $packedOrder = $packedOrderByInstance[(int) ($assignment['status_instances_id'] ?? 0)] ?? null;
+    if ($statusName === 'packed' || ($statusOrder !== null && $packedOrder !== null && (int) $statusOrder >= $packedOrder)) {
+        finish(false, ['message' => 'Packed assets, or assets beyond Packed, cannot be removed from a project']);
+    }
+}
 
 $projectFinanceHelper = new projectFinance();
 $priceMaths = $projectFinanceHelper->durationMaths($project['projects_id']);
