@@ -47,6 +47,40 @@ test("adding an asset to a project from the assets page", async ({ page, asA, te
   await page.goto(`/project/?id=${project}`);
   await page.locator('a[href="#assets-view"]').click();
   await expect(page.locator("#assets-view")).toContainText(typeName);
+  await expect(page.locator("#projectAssetRequirementsCardBody")).toContainText(typeName);
+  await expect(page.locator(".assetAssignmentCheckboxAll")).toHaveCount(0);
+  await expect(page.locator(`a[href*="/assets.php?project=${project}"]`)).toHaveCount(0);
+});
+
+test("finding and adding a planned product from the project asset browser", async ({ page, asA, tenants: { a } }) => {
+  const productPrefix = `Browser product ${Date.now()}`;
+  const products: Array<{ id: number; name: string }> = [];
+  for (let index = 1; index <= 8; index++) {
+    const name = `${productPrefix} ${index}`;
+    const response = await asA.api("/api/assets/newAssetType.php", { instances_id: a.instanceId, formData: formData({
+      manufacturers_id: a.manufacturerId, assetCategories_id: a.categoryId, assetTypes_name: name, assetTypes_dayRate: "1.00",
+    }) });
+    products.push({ id: response.json.response.assetTypes_id as number, name });
+  }
+  const project = await newProject(asA, a, a.users.full.id, { start: "2036-07-01 09:00:00", end: "2036-07-02 18:00:00" });
+
+  await page.goto(`/project/?id=${project}`);
+  await page.getByRole("button", { name: "Add Requirement" }).click();
+  const modal = page.locator("#addAssetRequirementModal");
+  await modal.locator("#addAssetRequirementSearch").fill(productPrefix);
+  await expect(modal.locator(".addAssetRequirementProduct")).toHaveCount(6);
+  await expect(modal.locator("#addAssetRequirementPage")).toContainText("Page 1 of 2");
+
+  await modal.locator("#addAssetRequirementNext").click();
+  await expect(modal.locator(".addAssetRequirementProduct")).toHaveCount(2);
+  await modal.locator(".assetRequirementProductQuantity").nth(0).fill("6");
+  await modal.locator(".assetRequirementProductQuantity").nth(1).fill("10");
+  await modal.getByRole("button", { name: "Add & Close" }).click();
+
+  await expect.poll(() => dbQuery<{ type: number; quantity: number }>(
+    "SELECT assetTypes_id type, projectAssetRequirements_quantity quantity FROM projectAssetRequirements WHERE projects_id = ? AND projectAssetRequirements_deleted = 0 ORDER BY assetTypes_id",
+    [project],
+  )).toEqual([{ type: products[6].id, quantity: 6 }, { type: products[7].id, quantity: 10 }]);
 });
 
 test("recording a payment from the project's Finance tab", async ({ page, asA, tenants: { a } }) => {

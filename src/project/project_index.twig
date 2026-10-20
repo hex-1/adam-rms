@@ -71,15 +71,6 @@
         <div class="col-12 col-md-12 col-lg-12">
             <div class="row">
                 {% if project.projectsTypes_config_assets == 1 %}
-                    {% for assetAssignment in FINANCIALS.assetsAssigned %}
-                        {% for flag in assetAssignment.flagsblocks.BLOCK %}
-                            <div class="alert alert-danger">
-                                <a href="{{ CONFIG.ROOTURL }}/maintenance/job.php?id={{ flag.maintenanceJobs_id }}" type="button" style="text-decoration: none;" class="close"><i class="fas fa-info-circle"></i></a>
-a                                <h5> <i class="fas fa-ban"></i> {{ assetAssignment.assets_tag|aTag }}: {{ assetAssignment.manufacturers_name }} - {{ assetAssignment.assetTypes_name }}</h5>
-                                {{ flag.maintenanceJobs_title }} - {{ flag.maintenanceJobs_faultDescription }}
-                            </div>
-                        {% endfor %}
-                    {% endfor %}
                     {% if project.projectsStatuses_assetsReleased == 1 %}
                     <div class="col-12">
                         <div class="alert alert-danger">
@@ -95,12 +86,6 @@ a                                <h5> <i class="fas fa-ban"></i> {{ assetAssignm
                         <div class="card-header">
                             <ul class="nav nav-pills" id="nav-bar">
                                 <li class="nav-item"><a class="nav-link active" href="#details-view" data-toggle="tab" style="font-weight:bold;">{{project.projects_name}}</a></li>
-                                {% if project.projectsTypes_config_assets == 1 and project.projects_archived != 1 and "PROJECTS:PROJECT_ASSETS:CREATE:ASSIGN_AND_UNASSIGN"|instancePermissions %}
-                                    <li class="nav-item"><a class="nav-link" href="#" data-toggle="modal" data-target="#addAssetRequirementModal"><i class="fas fa-list-ol"></i> Add Asset Requirement</a></li>
-                                {% endif %}
-                                {% if project.projectsTypes_config_assets == 1 and project.projects_dates_deliver_start and project.projects_archived != 1 and "PROJECTS:PROJECT_ASSETS:CREATE:ASSIGN_AND_UNASSIGN"|instancePermissions %}
-                                    <li class="nav-item"><a class="nav-link" href="{{CONFIG.ROOTURL}}/assets.php?project={{project.projects_id}}&project_referer={{project.projects_id}}"><i class="fas fa-plus"></i> Add Assets</a></li>
-                                {% endif %}
                                 {% if project.projectsTypes_config_assets == 1 %}
                                     <li class="nav-item"><a class="nav-link" href="#assets-view" data-toggle="tab"><i class="fas fa-list"></i> Assets List</a></li>
                                 {% endif %}
@@ -409,9 +394,6 @@ a                                <h5> <i class="fas fa-ban"></i> {{ assetAssignm
                             {% if project.projectsTypes_config_assets == 1 %}
                                 {% embed 'project/project_assetRequirements.twig' %}{% endembed %}
                             {% endif %}
-                            {% if (FINANCIALS['assetsAssigned'] or FINANCIALS['assetsAssignedSUB']) and project.projectsTypes_config_assets == 1 %}
-                                {% embed 'project/project_assets.twig' %}{% endembed %}
-                            {% endif %}
                         </div>
                         <div class="tab-pane" id="assets-board">
                             {% if (project.assetRequirements or FINANCIALS['assetsAssigned'] or FINANCIALS['assetsAssignedSUB']) and project.projectsTypes_config_assets == 1 %}
@@ -451,8 +433,23 @@ a                                <h5> <i class="fas fa-ban"></i> {{ assetAssignm
     </div>
     {% embed 'assets/modals/location_create.twig' %}{% endembed %}
     {% if project.projectsTypes_config_assets == 1 and project.projects_archived != 1 and "PROJECTS:PROJECT_ASSETS:CREATE:ASSIGN_AND_UNASSIGN"|instancePermissions %}
+        <style>
+            #addAssetRequirementModal .assetRequirementProductQuantity { -moz-appearance: textfield; }
+            #addAssetRequirementModal .assetRequirementProductQuantity::-webkit-inner-spin-button,
+            #addAssetRequirementModal .assetRequirementProductQuantity::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+            #addAssetRequirementModal .assetRequirementProductCard { height: 22rem; }
+            #addAssetRequirementModal .assetRequirementProductSelect { overflow: hidden; }
+            #addAssetRequirementModal .assetRequirementProductDetails { height: 8.5rem; overflow: hidden; }
+            #addAssetRequirementModal .assetRequirementProductName {
+                display: -webkit-box;
+                min-height: 3rem;
+                overflow: hidden;
+                -webkit-box-orient: vertical;
+                -webkit-line-clamp: 2;
+            }
+        </style>
         <div class="modal fade" id="addAssetRequirementModal">
-            <div class="modal-dialog"><div class="modal-content">
+            <div class="modal-dialog modal-lg"><div class="modal-content">
                 <div class="modal-header">
                     <h4 class="modal-title">Add Asset Requirement</h4>
                     <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
@@ -471,17 +468,23 @@ a                                <h5> <i class="fas fa-ban"></i> {{ assetAssignm
                             <small class="form-text text-muted">The Asset Type's category will be created automatically inside this section.</small>
                         </div>
                         <div class="form-group">
-                            <label for="addAssetRequirementType">Asset Type</label>
-                            <select class="form-control" id="addAssetRequirementType" name="assetTypes_id" required>
-                                <option value="">Select an Asset Type</option>
-                                {% for assetType in assetTypesForRequirements %}
-                                    <option value="{{ assetType.assetTypes_id }}">{{ assetType.manufacturers_id != 1 ? assetType.manufacturers_name ~ ' - ' : '' }}{{ assetType.assetTypes_name }}</option>
-                                {% endfor %}
-                            </select>
+                            <label for="addAssetRequirementSearch">Find a product</label>
+                            <div class="input-group">
+                                <div class="input-group-prepend"><span class="input-group-text"><i class="fas fa-search"></i></span></div>
+                                <input class="form-control" id="addAssetRequirementSearch" type="search" placeholder="Start typing a product or manufacturer name" autocomplete="off">
+                            </div>
+                            <input type="hidden" id="addAssetRequirementType" name="assetTypes_id">
+                            <div class="row mt-2" id="addAssetRequirementResults" aria-live="polite"></div>
+                            <div class="d-flex justify-content-between align-items-center mt-2" id="addAssetRequirementPagination">
+                                <button class="btn btn-sm btn-outline-secondary" id="addAssetRequirementPrevious" type="button"><i class="fas fa-chevron-left mr-1"></i>Previous</button>
+                                <small class="text-muted" id="addAssetRequirementPage"></small>
+                                <button class="btn btn-sm btn-outline-secondary" id="addAssetRequirementNext" type="button">Next<i class="fas fa-chevron-right ml-1"></i></button>
+                            </div>
+                            <small class="form-text text-muted" id="addAssetRequirementSelection">Set a quantity on one or more products.</small>
                         </div>
-                        <div class="form-group">
+                        <div class="form-group d-none">
                             <label for="addAssetRequirementQuantity">Quantity</label>
-                            <input class="form-control" id="addAssetRequirementQuantity" name="quantity" type="number" min="1" step="1" value="1" required>
+                            <input class="form-control" id="addAssetRequirementQuantity" name="quantity" type="number" min="0" step="1" value="0">
                         </div>
                         <button type="submit" class="d-none" aria-hidden="true"></button>
                     </form>
@@ -1453,11 +1456,6 @@ a                                <h5> <i class="fas fa-ban"></i> {{ assetAssignm
             });
             {% endif %}
             {% if project.projectsTypes_config_assets == 1 and project.projects_archived != 1 and "PROJECTS:PROJECT_ASSETS:CREATE:ASSIGN_AND_UNASSIGN"|instancePermissions %}
-            $('#addAssetRequirementType').select2({
-                theme: "bootstrap4",
-                dropdownParent: $('#addAssetRequirementModal'),
-                width: '100%'
-            });
             $('#addAssetRequirementSection').select2({
                 theme: 'bootstrap4',
                 dropdownParent: $('#addAssetRequirementModal'),
@@ -1469,6 +1467,81 @@ a                                <h5> <i class="fas fa-ban"></i> {{ assetAssignm
                 width: '100%'
             });
             const addAssetRequirementAgainKey = 'addAssetRequirementAgain-{{ project.projects_id }}';
+            let assetRequirementProductPage = 1;
+            let assetRequirementSearchTimer = null;
+            let assetRequirementQuantities = {};
+
+            // Current RMS presents products as a searchable picker rather than a
+            // very long select. Keep the complete list in the page, but only draw
+            // six matches at a time so this remains quick on smaller screens.
+            function renderAssetRequirementProducts() {
+                const results = $('#addAssetRequirementResults').html('<div class="col-12 text-center text-muted py-4"><i class="fas fa-spinner fa-spin mr-2"></i>Finding products…</div>');
+                ajaxcall('projects/assets/searchRequirementProducts.php', {projects_id: '{{ project.projects_id }}', search: $('#addAssetRequirementSearch').val().trim(), page: assetRequirementProductPage}, function (data) {
+                    const response = data.response;
+                    results.empty();
+                    response.products.forEach(function (product) {
+                        const productId = String(product.assetTypes_id);
+                        const productQuantity = assetRequirementQuantities[productId] || 0;
+                        const card = $('<div class="card w-100 assetRequirementProductCard">');
+                        const selectProduct = $('<button type="button" class="btn btn-link text-dark text-left p-0 addAssetRequirementProduct assetRequirementProductSelect">').attr('data-product-id', product.assetTypes_id).attr('data-product-name', product.assetTypes_name);
+                        const placeholder = function () { return $('<div class="d-flex align-items-center justify-content-center bg-light text-muted"><i class="fas fa-box fa-3x"></i></div>').css('height', '110px'); };
+                        const image = product.thumbnail ? $('<img class="card-img-top">').attr({src: product.thumbnail, alt: product.assetTypes_name}).on('error', function () { $(this).replaceWith(placeholder()); }) : placeholder();
+                        image.css({height: '110px', objectFit: 'contain'});
+                        const name = (product.manufacturers_name ? product.manufacturers_name + ' - ' : '') + product.assetTypes_name;
+                        const availabilityClass = product.available > 0 ? 'text-success' : 'text-danger';
+                        const maintenance = $('<small class="text-warning assetRequirementMaintenanceWarning">').attr({'data-available': product.available, 'data-blocked': product.maintenanceBlocked}).text(product.maintenanceBlocked + ' blocked by maintenance');
+                        selectProduct.append(image, $('<div class="card-body p-2 assetRequirementProductDetails">').append($('<b class="assetRequirementProductName">').text(name), $('<span class="d-block">').text(new Intl.NumberFormat(undefined, {style: 'currency', currency: '{{ USERDATA.instance.instances_config_currency }}'}).format(product.periodPrice / 100) + ' for period'), $('<small class="d-block">').addClass(availabilityClass).attr('title', product.availabilityLabel).text(product.available + ' available · ' + product.stock + ' total'), maintenance));
+                        const quantity = $('<input class="form-control form-control-sm text-center assetRequirementProductQuantity" type="number" min="0" step="1" aria-label="Quantity">').attr({'data-product-id': product.assetTypes_id, 'data-product-name': product.assetTypes_name}).val(productQuantity);
+                        const quantityControl = $('<div class="input-group input-group-sm">').append(
+                            $('<div class="input-group-prepend">').append('<button class="btn btn-outline-secondary assetRequirementQuantityStep" type="button" data-step="-1" title="Decrease quantity" aria-label="Decrease quantity"><i class="fas fa-chevron-down"></i></button>'),
+                            quantity,
+                            $('<div class="input-group-append">').append('<button class="btn btn-outline-secondary assetRequirementQuantityStep" type="button" data-step="1" title="Increase quantity" aria-label="Increase quantity"><i class="fas fa-chevron-up"></i></button>')
+                        );
+                        card.append(selectProduct, $('<div class="card-footer p-2">').append($('<label class="small mb-1">').text('Quantity'), quantityControl));
+                        if (productQuantity > 0) card.addClass('border-primary bg-light');
+                        results.append($('<div class="col-md-4 mb-2 d-flex">').append(card));
+                    });
+                    if (!response.products.length) results.append('<div class="col-12 text-muted py-3">No matching products found.</div>');
+                    assetRequirementProductPage = response.page;
+                    $('#addAssetRequirementPage').text(response.count ? 'Page ' + response.page + ' of ' + response.pages + ' · ' + response.count + ' products' : 'No products');
+                    $('#addAssetRequirementPrevious').prop('disabled', response.page <= 1);
+                    $('#addAssetRequirementNext').prop('disabled', response.page >= response.pages);
+                    refreshAssetRequirementMaintenanceWarnings();
+                }, false);
+            }
+            function refreshAssetRequirementMaintenanceWarnings() {
+                $('#addAssetRequirementResults .assetRequirementMaintenanceWarning').each(function () {
+                    const quantity = parseInt($(this).closest('.card').find('.assetRequirementProductQuantity').val(), 10) || 0;
+                    const show = quantity > 0 && parseInt($(this).data('blocked'), 10) > 0 && parseInt($(this).data('available'), 10) < quantity;
+                    $(this).toggle(show);
+                });
+            }
+            $('#addAssetRequirementSearch').on('input', function () { clearTimeout(assetRequirementSearchTimer); assetRequirementProductPage = 1; assetRequirementSearchTimer = setTimeout(renderAssetRequirementProducts, 200); });
+            $('#addAssetRequirementPrevious').on('click', function () { assetRequirementProductPage--; renderAssetRequirementProducts(); });
+            $('#addAssetRequirementNext').on('click', function () { assetRequirementProductPage++; renderAssetRequirementProducts(); });
+            $('#addAssetRequirementResults').on('click', '.addAssetRequirementProduct', function () {
+                $(this).closest('.card').find('.assetRequirementProductQuantity').trigger('focus').select();
+            });
+            $('#addAssetRequirementResults').on('focus input change', '.assetRequirementProductQuantity', function () {
+                const quantity = Math.max(0, parseInt($(this).val(), 10) || 0);
+                const productId = String($(this).data('product-id'));
+                $(this).val(quantity);
+                if (quantity > 0) assetRequirementQuantities[productId] = quantity;
+                else delete assetRequirementQuantities[productId];
+                $(this).closest('.card').toggleClass('border-primary bg-light', quantity > 0);
+                const selectedCount = Object.keys(assetRequirementQuantities).length;
+                $('#addAssetRequirementSelection').removeClass('text-danger').addClass('text-muted').text(selectedCount ? selectedCount + ' product' + (selectedCount === 1 ? '' : 's') + ' ready to add.' : 'Set a quantity on one or more products.');
+                refreshAssetRequirementMaintenanceWarnings();
+            });
+            $('#addAssetRequirementResults').on('click', '.assetRequirementQuantityStep', function () {
+                const quantity = $(this).closest('.input-group').find('.assetRequirementProductQuantity');
+                const nextValue = Math.max(0, (parseInt(quantity.val(), 10) || 0) + parseInt($(this).data('step'), 10));
+                quantity.val(nextValue).trigger('change').trigger('focus');
+            });
+            $('#addAssetRequirementModal').on('shown.bs.modal', function () {
+                renderAssetRequirementProducts();
+                $('#addAssetRequirementSearch').trigger('focus');
+            });
             if (sessionStorage.getItem(addAssetRequirementAgainKey) === 'true') {
                 sessionStorage.removeItem(addAssetRequirementAgainKey);
                 $('#addAssetRequirementModal').modal('show');
@@ -1504,7 +1577,7 @@ a                                <h5> <i class="fas fa-ban"></i> {{ assetAssignm
                 },
                 stop: function (event, ui) {
                     const physicalRowsByRequirement = $('#projectAssetRequirementsTableBody').data('physical-rows-by-requirement') || {};
-                    $('#projectAssetRequirementsTableBody > .projectAssetOutlineItem[data-kind="requirement"]').each(function () {
+                    $('#projectAssetRequirementsTableBody > .projectAssetOutlineItem[data-kind="requirement"], #projectAssetRequirementsTableBody > .projectAssetOutlineItem[data-kind="direct"]').each(function () {
                         const requirementRow = $(this);
                         const physicalRows = physicalRowsByRequirement[String(requirementRow.attr('data-id'))];
                         if (physicalRows && physicalRows.length) requirementRow.after(physicalRows);
@@ -1524,19 +1597,21 @@ a                                <h5> <i class="fas fa-ban"></i> {{ assetAssignm
                             sectionStack[depth] = parseInt(row.data('id'), 10);
                         }
                         row.attr('data-depth', depth);
-                        row.find('.projectAssetDragHandle').css('margin-left', (depth * 1.5) + 'rem');
-                        row.find('.projectAssetOutlineContent').css('padding-left', '0.75rem');
+                        row.find('.projectAssetDragHandle').css('margin-left', 0);
+                        row.find('.projectAssetOutlineContent').toggleClass('projectAssetNestedContent', depth > 0).css({'--asset-guide-left': (0.75 + ((depth - 1) * 1.25)) + 'rem', 'padding-left': (0.75 + (depth * 1.25)) + 'rem'});
                         outline.push({
                             kind: kind,
                             id: parseInt(row.data('id'), 10),
                             depth: depth
                         });
                     });
-                    $('#projectAssetRequirementsTableBody > .projectAssetOutlineItem[data-kind="requirement"]').each(function () {
+                    $('#projectAssetRequirementsTableBody > .projectAssetOutlineItem[data-kind="requirement"], #projectAssetRequirementsTableBody > .projectAssetOutlineItem[data-kind="direct"]').each(function () {
                         const requirementRow = $(this);
                         const childDepth = (parseInt(requirementRow.attr('data-depth'), 10) || 0) + 1;
                         $('#projectAssetRequirementsTableBody > .projectAssetPhysicalAsset[data-requirement-id="' + requirementRow.data('id') + '"]').each(function () {
-                            $(this).attr('data-depth', childDepth + (parseInt($(this).attr('data-linked-depth'), 10) || 0));
+                            const row = $(this);
+                            const depth = childDepth + (parseInt(row.attr('data-linked-depth'), 10) || 0);
+                            row.attr('data-depth', depth).children('td').eq(1).addClass('projectAssetNestedContent').css({'--asset-guide-left': (0.75 + ((depth - 1) * 1.25)) + 'rem', 'padding-left': (0.75 + (depth * 1.25)) + 'rem'});
                         });
                     });
                     if (typeof window.refreshAssetRequirementSections === 'function') window.refreshAssetRequirementSections();
@@ -1546,53 +1621,40 @@ a                                <h5> <i class="fas fa-ban"></i> {{ assetAssignm
                     ajaxcall('projects/assets/sortRequirementOutline.php', {
                         projects_id: '{{ project.projects_id }}',
                         outline: JSON.stringify(outline)
-                    }, function () {
+                    }, function (data) {
+                        if (data.response && data.response.promoted) return location.reload();
                         saveStatus.html('<i class="fas fa-check mr-1"></i>Saved').delay(1200).fadeOut(400);
                     }, false);
                 }
             });
             function saveAssetRequirement(addAnother) {
-                if ($('#addAssetRequirementForm')[0].checkValidity() === false) {
-                    $('#addAssetRequirementForm')[0].reportValidity();
+                const products = Object.keys(assetRequirementQuantities).map(function (assetTypesId) {
+                    return {assetTypes_id: parseInt(assetTypesId, 10), quantity: assetRequirementQuantities[assetTypesId]};
+                }).filter(function (product) { return product.quantity > 0; });
+                if (!products.length) {
+                    $('#addAssetRequirementSelection').removeClass('text-muted').addClass('text-danger').text('Set a quantity of one or more on at least one product.');
+                    $('#addAssetRequirementSearch').trigger('focus');
                     return;
                 }
-                const formData = {};
-                $('#addAssetRequirementForm').serializeArray().forEach(function (item) { formData[item.name] = item.value; });
-                const assetTypeName = $('#addAssetRequirementType option:selected').text();
-                ajaxcall("projects/assets/addRequirement.php", formData, function (data) {
-                    const requirement = data.response;
-                    if (requirement.reload) {
+                const sectionId = $('#addAssetRequirementSection').val();
+                $('.addAssetRequirementButton').prop('disabled', true);
+                let index = 0;
+                function addNextProduct() {
+                    if (index >= products.length) {
                         if (addAnother) sessionStorage.setItem(addAssetRequirementAgainKey, 'true');
                         location.reload();
                         return;
                     }
-                    const rowId = 'projectAssetRequirementType' + requirement.assetTypes_id;
-                    let row = $('#' + rowId);
-                    if (row.length) {
-                        row.attr('data-required', requirement.projectAssetRequirements_quantity);
-                        row.find('.projectAssetRequirementPacked .projectAssetStatusBadge').text(requirement.packedCount + ' / ' + requirement.projectAssetRequirements_quantity + ' packed');
-                    } else {
-                        row = $('<tr>').attr('id', rowId).attr('data-required', requirement.projectAssetRequirements_quantity);
-                        row.append($('<td>'));
-                        const link = $('<a>')
-                            .attr('href', '{{ CONFIG.ROOTURL }}/asset.php?id=' + requirement.assetTypes_id)
-                            .append($('<b>').text(assetTypeName));
-                        row.append($('<td>').append(link));
-                        row.append($('<td>').addClass('projectAssetRequirementPacked').append($('<span class="badge badge-secondary projectAssetStatusBadge">').text(requirement.packedCount + ' / ' + requirement.projectAssetRequirements_quantity + ' packed')));
-                        row.append('<td></td><td></td><td></td>');
-                        row.append($('<td>'));
-                        $('#projectAssetRequirementsTableBody').append(row);
-                    }
-                    row.find('.projectAssetStatusBadge').attr('title', requirement.availability.label).attr('data-availability-status', requirement.availability.status);
-                    $('#projectAssetRequirementsEmpty').hide();
-                    $('#addAssetRequirementForm')[0].reset();
-                    $('#addAssetRequirementType').val('').trigger('change');
-                    if (addAnother) {
-                        $('#addAssetRequirementType').select2('open');
-                    } else {
-                        $('#addAssetRequirementModal').modal('hide');
-                    }
-                });
+                    const product = products[index++];
+                    ajaxcall('projects/assets/addRequirement.php', {
+                        projects_id: '{{ project.projects_id }}',
+                        projectAssetRequirementSections_id: sectionId,
+                        assetTypes_id: product.assetTypes_id,
+                        quantity: product.quantity
+                    }, addNextProduct, false);
+                }
+                $('#addAssetRequirementSelection').removeClass('text-danger').addClass('text-muted').html('<i class="fas fa-spinner fa-spin mr-1"></i>Adding ' + products.length + ' product' + (products.length === 1 ? '' : 's') + '…');
+                addNextProduct();
             }
             $('#addAssetRequirementForm').on('submit', function (event) {
                 event.preventDefault();

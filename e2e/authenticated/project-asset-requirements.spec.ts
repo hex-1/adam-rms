@@ -1,4 +1,4 @@
-import { type Dates, newProject } from "../projects";
+import { assign, type Dates, newAsset, newProject } from "../projects";
 import { dbQuery, expect, test } from "../tenants";
 
 /**
@@ -8,6 +8,46 @@ import { dbQuery, expect, test } from "../tenants";
  */
 
 const DATES: Dates = { start: "2036-08-01 09:00:00", end: "2036-08-03 18:00:00" };
+
+test("an asset assigned without a planned requirement is shown in the new assets list", async ({ asA, tenants: { a } }) => {
+  const project = await newProject(asA, a, a.users.full.id, DATES);
+  const asset = await newAsset(asA, a);
+  const [{ tag }] = dbQuery<{ tag: string }>("SELECT assets_tag tag FROM assets WHERE assets_id = ?", [asset]);
+  await expect(assign(asA, a, project, asset)).resolves.toMatchObject({ json: { result: true } });
+
+  const page = await asA.page(`/project/?id=${project}`);
+  expect(page.status).toBe(200);
+  expect(page.body).toContain("Directly assigned");
+  expect(page.body).toContain(tag);
+  const category = `data-kind="section" data-id="-${1000000 + a.categoryGroupId}" data-depth="0"`;
+  const assetType = `data-kind="direct" data-id="-${a.assetTypeId}" data-depth="1"`;
+  expect(page.body).toContain(category);
+  expect(page.body).toContain(assetType);
+  expect(page.body.indexOf(category)).toBeLessThan(page.body.indexOf(assetType));
+  expect(page.body).toContain(`data-requirement-id="-${a.assetTypeId}" aria-expanded="true" title="Collapse allocated assets"`);
+
+  const promoted = await asA.api("/api/projects/assets/sortRequirementOutline.php", {
+    instances_id: a.instanceId,
+    projects_id: project,
+    outline: JSON.stringify([
+      { kind: "section", id: -(1000000 + a.categoryGroupId), depth: 0 },
+      { kind: "direct", id: -a.assetTypeId, depth: 1 },
+    ]),
+  });
+  expect(promoted.json).toMatchObject({ result: true, response: { promoted: true } });
+  const [requirement] = dbQuery<{ id: number; quantity: number; section: number }>(
+    `SELECT projectAssetRequirements_id id, projectAssetRequirements_quantity quantity,
+            projectAssetRequirementSections_id section
+       FROM projectAssetRequirements WHERE projects_id = ? AND assetTypes_id = ? AND projectAssetRequirements_deleted = 0`,
+    [project, a.assetTypeId],
+  );
+  expect(requirement).toMatchObject({ quantity: 1 });
+  expect(requirement.section).toBeTruthy();
+  expect(dbQuery<{ requirement: number }>(
+    "SELECT projectAssetRequirements_id requirement FROM assetsAssignments WHERE projects_id = ? AND assets_id = ?",
+    [project, asset],
+  )).toEqual([{ requirement: requirement.id }]);
+});
 
 test("repeated additions merge into one requirement and reuse its automatic category", async ({ asA, tenants: { a } }) => {
   const project = await newProject(asA, a, a.users.full.id, DATES);

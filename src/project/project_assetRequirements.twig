@@ -1,3 +1,47 @@
+<style>
+    #projectAssetRequirementsCardBody { position: relative; }
+    #projectAssetHierarchyBoxLayer {
+        inset: 0;
+        pointer-events: none;
+        position: absolute;
+        z-index: 0;
+    }
+    #projectAssetHierarchyBoxLayer .projectAssetHierarchyBox {
+        background: rgba(255, 255, 255, .97);
+        border: 1px solid rgba(108, 117, 125, .34);
+        border-radius: .65rem;
+        box-shadow: 0 .15rem .38rem rgba(33, 37, 41, .13);
+        position: absolute;
+    }
+    #projectAssetRequirementsCardBody > :not(#projectAssetHierarchyBoxLayer) { position: relative; z-index: 1; }
+    #projectAssetRequirementsTableBody > tr,
+    #projectAssetRequirementsTableBody > tr > td { background-color: transparent !important; }
+    #projectAssetRequirementsTableBody > tr > td { border-top-color: transparent !important; }
+    @media print { #projectAssetHierarchyBoxLayer { display: none; } }
+    #projectAssetRequirementsTableBody .projectAssetHierarchyGutter {
+        min-width: 4.25rem;
+        white-space: nowrap;
+    }
+    #projectAssetRequirementsTableBody .projectAssetHierarchyGutter input,
+    #projectAssetRequirementsTableBody .projectAssetDragHandle {
+        display: inline-block;
+        vertical-align: middle;
+    }
+    #projectAssetRequirementsTableBody .projectAssetNestedContent {
+        position: relative;
+    }
+    #projectAssetRequirementsTableBody .projectAssetNestedContent::before {
+        border-bottom: 2px solid #c7cdd3;
+        border-left: 2px solid #c7cdd3;
+        border-radius: 0 0 0 .65rem;
+        content: "";
+        height: calc(50% + 1px);
+        left: var(--asset-guide-left);
+        position: absolute;
+        top: -1px;
+        width: .8rem;
+    }
+</style>
 <div class="card card-primary card-outline">
     <div class="card-header">
         <h3 class="card-title">Planned Asset Requirements</h3>
@@ -26,6 +70,9 @@
                 </div>
             </div>
             <span id="assetRequirementOrderStatus" class="text-muted mr-2" style="display: none;"></span>
+            {% if project.projects_archived != 1 and "PROJECTS:PROJECT_ASSETS:CREATE:ASSIGN_AND_UNASSIGN"|instancePermissions %}
+            <button type="button" class="btn btn-tool" title="Add Asset Requirement" data-toggle="modal" data-target="#addAssetRequirementModal"><i class="fas fa-list-ol"></i> Add Requirement</button>
+            {% endif %}
             <button type="button" class="btn btn-tool" id="printProjectAssetRequirements" title="Print planned assets"><i class="fas fa-print"></i> Print</button>
             <button type="button" class="btn btn-tool" id="exportProjectAssetRequirements" title="Export planned assets as CSV"><i class="fas fa-file-csv"></i> Export</button>
             {% if "PROJECTS:PROJECT_ASSETS:CREATE:ASSIGN_AND_UNASSIGN"|instancePermissions %}
@@ -43,7 +90,8 @@
             {% endif %}
         </div>
     </div>
-    <div class="card-body p-0">
+    <div class="card-body p-0" id="projectAssetRequirementsCardBody">
+        <div id="projectAssetHierarchyBoxLayer" aria-hidden="true"></div>
         <div class="d-flex flex-wrap align-items-center border-bottom px-3 py-2" id="projectAssetRequirementSummary">
             <span class="mr-4"><b>Packed:</b> <span id="projectAssetSummaryPacked">{{ project.assetRequirementSummary.packed }} / {{ project.assetRequirementSummary.required }}</span></span>
             <span class="mr-4"><b>Weight:</b> <span id="projectAssetSummaryMass">{{ project.assetRequirementSummary.mass|number_format(2) }} kg{% if project.assetRequirementSummary.unknownMass %} + ?{% endif %}</span></span>
@@ -58,19 +106,19 @@
             <div class="col-md-4"><select class="form-control form-control-sm" id="projectAssetRequirementFilter"><option value="all">All items</option><option value="shortage">Shortages only</option><option value="warnings">Flags and blocks</option><option value="unpacked">Not fully packed</option><option value="unknown-mass">Missing weight</option><option value="cross-instance">Other units</option></select></div>
         </div>
         <table class="table projects">
-            <thead><tr><th style="width: 8rem;"><input type="checkbox" id="projectAssetBulkAll" title="Select all allocated assets" aria-label="Select all allocated assets"></th><th>Asset Type</th><th style="width: 11em;">Status</th><th>Weight</th><th>Value</th><th>Cost per unit</th><th>Discount</th><th>Total cost</th><th style="width: 3rem;"></th></tr></thead>
+            <thead><tr><th style="width: 4.25rem;"><input type="checkbox" id="projectAssetBulkAll" title="Select all allocated assets" aria-label="Select all allocated assets"></th><th>Asset Type</th><th style="width: 11em;">Status</th><th>Weight</th><th>Value</th><th>Cost per unit</th><th>Discount</th><th>Total cost</th><th style="width: 3rem;"></th></tr></thead>
             <tbody id="projectAssetRequirementsTableBody">
                 <tr id="projectAssetRequirementsEmpty" {% if project.assetRequirementOutline %}style="display: none;"{% endif %}>
                     <td colspan="9"><i>No Asset Type requirements have been added yet.</i></td>
                 </tr>
                 {% for item in project.assetRequirementOutline %}
                     {% if item.kind == 'section' %}
-                    <tr class="projectAssetOutlineItem projectAssetRequirementSection" data-kind="section" data-id="{{ item.section.projectAssetRequirementSections_id }}" data-depth="{{ item.depth }}" style="background-color: {{ item.availability.rowColour|default('transparent') }};">
+                    <tr class="projectAssetOutlineItem projectAssetRequirementSection" data-kind="section" data-id="{{ item.section.projectAssetRequirementSections_id }}" data-depth="{{ item.depth }}">
                         <td class="projectAssetHierarchyGutter text-left">
-                            <input type="checkbox" class="projectAssetBulkSection mr-2" title="Select assets in this section" aria-label="Select assets in this section">
-                            <span class="projectAssetDragHandle" title="Drag to reorder; move left or right to change indentation" style="display: inline-block; cursor: grab; margin-left: {{ item.depth * 1.5 }}rem;"><i class="fas fa-bars text-muted"></i></span>
+                            <input type="checkbox" class="projectAssetBulkSection mr-1" title="Select assets in this section" aria-label="Select assets in this section">
+                            <span class="projectAssetDragHandle" title="Drag to reorder; move left or right to change indentation" style="display: inline-block; cursor: grab;"><i class="fas fa-bars text-muted"></i></span>
                         </td>
-                        <td class="projectAssetOutlineContent" style="padding-left: 0.75rem;">
+                        <td class="projectAssetOutlineContent{% if item.depth > 0 %} projectAssetNestedContent{% endif %}" style="--asset-guide-left: {{ 0.75 + ((item.depth - 1) * 1.25) }}rem; padding-left: {{ 0.75 + (item.depth * 1.25) }}rem;">
                             <button type="button" class="btn btn-link btn-sm p-0 mr-2 projectAssetSectionToggle text-muted" data-section-id="{{ item.section.projectAssetRequirementSections_id }}" aria-expanded="true" title="Collapse section">
                                 <i class="fas fa-folder-open"></i><span class="sr-only">Toggle section</span>
                             </button>
@@ -80,11 +128,13 @@
                         </td>
                         <td class="projectAssetSectionPacked">
                             <span class="badge {{ item.requiredCount > 0 and item.packedCount >= item.requiredCount ? 'badge-success' : 'badge-secondary' }} projectAssetStatusBadge" data-availability-status="{{ item.availability.status }}" title="{{ item.availability.label }}">{{ item.packedCount }} / {{ item.requiredCount }} packed</span>
+                            <span class="badge ml-1 projectAssetAvailabilityBadge {{ item.availability.status == 'shortage' ? 'badge-danger' : (item.availability.status in ['turnaround', 'low-stock'] ? 'badge-warning' : (item.availability.status == 'available' ? 'badge-success' : 'badge-secondary')) }}" title="{{ item.availability.label }}">{{ item.availability.status == 'low-stock' ? 'Low stock' : (item.availability.status == 'turnaround' ? 'Turnaround' : item.availability.status|capitalize) }}</span>
                         </td>
                         <td class="projectAssetSectionTotalMass" title="{% if item.unknownMassCount %}{{ item.unknownMassCount }} item(s) have no mass defined{% endif %}">{{ item.totalMass|number_format(2) }} kg{% if item.unknownMassCount %} + ?{% endif %}</td>
                         <td class="projectAssetSectionTotalValue" title="{% if item.unknownValueCount %}{{ item.unknownValueCount }} item(s) have no replacement value defined{% endif %}">{{ item.totalValue|money }}{% if item.unknownValueCount %} + ?{% endif %}</td>
                         <td></td><td></td><td class="projectAssetSectionTotalPrice">{{ item.totalPrice|money }}</td>
                         <td>
+                            {% if not item.section.isDirectAssignmentSection %}
                             <div class="dropdown">
                                 <button class="btn btn-sm btn-link text-muted" type="button" data-toggle="dropdown" aria-label="Section actions"><i class="fas fa-ellipsis-v"></i></button>
                                 <div class="dropdown-menu dropdown-menu-right">
@@ -95,34 +145,38 @@
                                     <button class="dropdown-item text-danger deleteAssetRequirementSection" type="button" data-section-id="{{ item.section.projectAssetRequirementSections_id }}"><i class="fas fa-trash mr-2"></i>Delete section</button>
                                 </div>
                             </div>
+                            {% endif %}
                         </td>
                     </tr>
                     {% else %}
                     {% set requirement = item.requirement %}
-                    <tr id="projectAssetRequirement{{ requirement.projectAssetRequirements_id }}" class="projectAssetOutlineItem" data-kind="requirement" data-id="{{ requirement.projectAssetRequirements_id }}" data-depth="{{ item.depth }}" data-required="{{ requirement.projectAssetRequirements_quantity }}" data-note="{{ requirement.projectAssetRequirements_note|e('html_attr') }}" data-period-price="{{ requirement.periodPrice|moneyDecimal }}" data-discount="{{ requirement.projectAssetRequirements_discount }}" data-total-price="{{ requirement.totalPrice|moneyDecimal }}" data-total-mass="{{ requirement.totalMass }}" data-unknown-mass="{{ requirement.unknownMassCount }}" data-total-value="{{ requirement.totalValue }}" data-unknown-value="{{ requirement.unknownValueCount }}" data-warning-blocks="{{ requirement.blockedAssetCount }}" data-warning-flags="{{ requirement.flaggedAssetCount }}" style="background-color: {{ requirement.availability.rowColour }};">
+                    <tr id="projectAssetRequirement{{ requirement.projectAssetRequirements_id }}" class="projectAssetOutlineItem{% if requirement.isDirectAssignmentGroup %} projectAssetDirectGroup{% endif %}" data-kind="{{ requirement.isDirectAssignmentGroup ? 'direct' : 'requirement' }}" data-id="{{ requirement.projectAssetRequirements_id }}" data-depth="{{ item.depth }}" data-required="{{ requirement.projectAssetRequirements_quantity }}" data-note="{{ requirement.projectAssetRequirements_note|e('html_attr') }}" data-period-price="{{ requirement.periodPrice|moneyDecimal }}" data-discount="{{ requirement.projectAssetRequirements_discount }}" data-total-price="{{ requirement.totalPrice|moneyDecimal }}" data-total-mass="{{ requirement.totalMass }}" data-unknown-mass="{{ requirement.unknownMassCount }}" data-total-value="{{ requirement.totalValue }}" data-unknown-value="{{ requirement.unknownValueCount }}" data-warning-blocks="{{ requirement.blockedAssetCount }}" data-warning-flags="{{ requirement.flaggedAssetCount }}">
                         <td class="projectAssetHierarchyGutter text-left">
-                            <input type="checkbox" class="projectAssetBulkRequirement mr-2" title="Select allocated assets of this type" aria-label="Select allocated assets of this type">
-                            <span class="projectAssetDragHandle" title="Drag to reorder; move left or right to change indentation" style="display: inline-block; cursor: grab; margin-left: {{ item.depth * 1.5 }}rem;"><i class="fas fa-bars text-muted"></i></span>
+                            <input type="checkbox" class="projectAssetBulkRequirement mr-1" title="Select allocated assets of this type" aria-label="Select allocated assets of this type">
+                            <span class="projectAssetDragHandle" title="Drag to reorder; move left or right to change indentation" style="display: inline-block; cursor: grab;"><i class="fas fa-bars text-muted"></i></span>
                         </td>
-                        <td class="projectAssetOutlineContent" style="padding-left: 0.75rem;">
+                        <td class="projectAssetOutlineContent{% if item.depth > 0 %} projectAssetNestedContent{% endif %}" style="--asset-guide-left: {{ 0.75 + ((item.depth - 1) * 1.25) }}rem; padding-left: {{ 0.75 + (item.depth * 1.25) }}rem;">
                             <button type="button" class="btn btn-link btn-sm p-0 mr-2 projectAssetRequirementToggle text-muted" data-requirement-id="{{ requirement.projectAssetRequirements_id }}" aria-expanded="true" title="Collapse allocated assets" {{ requirement.assignedAssets ? '' : 'disabled' }}>
                                 <i class="fas fa-box-open"></i><span class="sr-only">Toggle allocated assets</span>
                             </button>
                             <a href="{{ CONFIG.ROOTURL }}/asset.php?id={{ requirement.assetTypes_id }}">
                                 <b>{{ requirement.manufacturers_id != 1 ? requirement.manufacturers_name ~ ' - ' : '' }}{{ requirement.assetTypes_name }}</b>
                             </a>
+                            {% if requirement.isDirectAssignmentGroup %}<span class="badge badge-info ml-2">Directly assigned</span>{% endif %}
                             <span class="projectAssetRequirementWarnings ml-2">{% if requirement.blockedAssetCount %}<span class="badge badge-danger mr-1" title="{{ requirement.blockedAssetCount }} blocked asset(s)"><i class="fas fa-ban mr-1"></i>{{ requirement.blockedAssetCount }}</span>{% endif %}{% if requirement.flaggedAssetCount %}<span class="badge badge-warning" title="{{ requirement.flaggedAssetCount }} flagged asset(s)"><i class="far fa-flag mr-1"></i>{{ requirement.flaggedAssetCount }}</span>{% endif %}</span>
                             <div class="projectAssetRequirementNote text-muted small{% if not requirement.projectAssetRequirements_note %} d-none{% endif %}"><i class="far fa-sticky-note mr-1"></i><span>{{ requirement.projectAssetRequirements_note }}</span></div>
                         </td>
                         <td class="projectAssetRequirementPacked">
                             <span class="badge {{ requirement.projectAssetRequirements_quantity > 0 and requirement.packedCount >= requirement.projectAssetRequirements_quantity ? 'badge-success' : 'badge-secondary' }} projectAssetStatusBadge" data-availability-status="{{ requirement.availability.status }}" title="{{ requirement.availability.label }}">{{ requirement.packedCount }} / {{ requirement.projectAssetRequirements_quantity }} packed</span>
+                            <span class="badge ml-1 projectAssetAvailabilityBadge {{ requirement.availability.status == 'shortage' ? 'badge-danger' : (requirement.availability.status in ['turnaround', 'low-stock'] ? 'badge-warning' : (requirement.availability.status == 'available' ? 'badge-success' : 'badge-secondary')) }}" title="{{ requirement.availability.label }}">{{ requirement.availability.status == 'low-stock' ? 'Low stock' : (requirement.availability.status == 'turnaround' ? 'Turnaround' : requirement.availability.status|capitalize) }}</span>
                         </td>
                         <td class="projectAssetRequirementTotalMass" title="{% if requirement.unknownMassCount %}{{ requirement.unknownMassCount }} item(s) have no mass defined{% endif %}">{{ requirement.totalMass|number_format(2) }} kg{% if requirement.unknownMassCount %} + ?{% endif %}</td>
                         <td class="projectAssetRequirementTotalValue" title="{% if requirement.unknownValueCount %}{{ requirement.unknownValueCount }} item(s) have no replacement value defined{% endif %}">{{ requirement.totalValue|money }}{% if requirement.unknownValueCount %} + ?{% endif %}</td>
-                        <td class="projectAssetRequirementUnitPrice projectAssetRequirementPriceEditable" title="Click to edit cost per unit" style="cursor: pointer;">{{ requirement.periodPrice|money }}</td>
-                        <td class="projectAssetRequirementDiscount projectAssetRequirementPriceEditable" title="Click to edit discount" style="cursor: pointer;">{{ requirement.projectAssetRequirements_discount|number_format(2) }}%</td>
+                        <td class="projectAssetRequirementUnitPrice{% if not requirement.isDirectAssignmentGroup %} projectAssetRequirementPriceEditable{% endif %}"{% if not requirement.isDirectAssignmentGroup %} title="Click to edit cost per unit" style="cursor: pointer;"{% endif %}>{{ requirement.isDirectAssignmentGroup ? '—' : requirement.periodPrice|money }}</td>
+                        <td class="projectAssetRequirementDiscount{% if not requirement.isDirectAssignmentGroup %} projectAssetRequirementPriceEditable{% endif %}"{% if not requirement.isDirectAssignmentGroup %} title="Click to edit discount" style="cursor: pointer;"{% endif %}>{{ requirement.isDirectAssignmentGroup ? '—' : requirement.projectAssetRequirements_discount|number_format(2) ~ '%' }}</td>
                         <td class="projectAssetRequirementTotalPrice">{{ requirement.totalPrice|money }}</td>
                         <td>
+                            {% if not requirement.isDirectAssignmentGroup %}
                             <div class="dropdown">
                                 <button class="btn btn-sm btn-link text-muted" type="button" data-toggle="dropdown" aria-label="Planned asset actions"><i class="fas fa-ellipsis-v"></i></button>
                                 <div class="dropdown-menu dropdown-menu-right">
@@ -131,12 +185,13 @@
                                     <button class="dropdown-item text-danger deleteAssetRequirement" type="button" data-requirement-id="{{ requirement.projectAssetRequirements_id }}"><i class="fas fa-trash mr-2"></i>Delete</button>
                                 </div>
                             </div>
+                            {% endif %}
                         </td>
                     </tr>
                     {% for assignedAsset in requirement.assignedAssets %}
-                    <tr class="projectAssetPhysicalAsset" data-kind="asset" data-requirement-id="{{ requirement.projectAssetRequirements_id }}" data-assignment-id="{{ assignedAsset.assetsAssignments_id }}" data-instance-id="{{ assignedAsset.instances_id }}" data-status-id="{{ assignedAsset.assetsAssignmentsStatus_id }}" data-asset-tag="{{ assignedAsset.assets_tag|e('html_attr') }}" data-comment="{{ assignedAsset.assetsAssignments_comment|e('html_attr') }}" data-linked="{{ assignedAsset.isLinkedAsset ? '1' : '0' }}" data-linked-depth="{{ assignedAsset.linkedDepth }}" data-depth="{{ item.depth + 1 + assignedAsset.linkedDepth }}" data-cross-instance="{{ assignedAsset.sourceInstanceName ? '1' : '0' }}">
+                    <tr class="projectAssetPhysicalAsset" data-kind="asset" data-requirement-id="{{ requirement.projectAssetRequirements_id }}" data-assignment-id="{{ assignedAsset.assetsAssignments_id }}" data-instance-id="{{ assignedAsset.instances_id }}" data-status-id="{{ assignedAsset.assetsAssignmentsStatus_id }}" data-asset-tag="{{ assignedAsset.assets_tag|e('html_attr') }}" data-comment="{{ assignedAsset.assetsAssignments_comment|e('html_attr') }}" data-linked="{{ assignedAsset.isLinkedAsset ? '1' : '0' }}" data-can-remove="{{ assignedAsset.canRemove ? '1' : '0' }}" data-linked-depth="{{ assignedAsset.linkedDepth }}" data-depth="{{ item.depth + 1 + assignedAsset.linkedDepth }}" data-cross-instance="{{ assignedAsset.sourceInstanceName ? '1' : '0' }}">
                         <td><input type="checkbox" class="projectAssetBulkAsset" aria-label="Select {{ assignedAsset.assets_tag|e('html_attr') }}"></td>
-                        <td style="padding-left: {{ 2 + (assignedAsset.linkedDepth * 1.5) }}rem;">
+                        <td class="projectAssetNestedContent" style="--asset-guide-left: {{ 0.75 + ((item.depth + assignedAsset.linkedDepth) * 1.25) }}rem; padding-left: {{ 0.75 + ((item.depth + 1 + assignedAsset.linkedDepth) * 1.25) }}rem;">
                             <i class="fas {{ assignedAsset.isLinkedAsset ? 'fa-link' : 'fa-tag' }} text-muted mr-2"{% if assignedAsset.isLinkedAsset %} title="Linked accessory"{% endif %}></i>
                             <a href="{{ CONFIG.ROOTURL }}/asset.php?id={{ assignedAsset.assetTypes_id }}&asset={{ assignedAsset.assets_id }}&instance={{ assignedAsset.instances_id }}">
                                 {{ assignedAsset.assets_tag|aTag }}
@@ -269,6 +324,46 @@
             collapsedRequirementIds = [];
         }
 
+        // Table rows cannot contain nested block elements, so group outlines
+        // live in a pointer-events-free layer over the table. Their dimensions
+        // are recalculated whenever rows move, collapse or are filtered.
+        let hierarchyBoxFrame = null;
+        window.refreshProjectAssetHierarchyBoxes = function () {
+            if (hierarchyBoxFrame !== null) cancelAnimationFrame(hierarchyBoxFrame);
+            hierarchyBoxFrame = requestAnimationFrame(function () {
+                hierarchyBoxFrame = null;
+                const container = $('#projectAssetRequirementsCardBody');
+                const layer = $('#projectAssetHierarchyBoxLayer').empty();
+                const containerOffset = container.offset();
+                const visibleRows = $('#projectAssetRequirementsTableBody > tr[data-depth]:visible');
+                visibleRows.each(function (index) {
+                    const parent = $(this);
+                    const depth = parseInt(parent.attr('data-depth'), 10) || 0;
+                    const allNext = parent.next('tr[data-depth]');
+                    const hasChildren = allNext.length && (parseInt(allNext.attr('data-depth'), 10) || 0) > depth;
+                    let last = parent;
+                    if (hasChildren) {
+                        for (let nextIndex = index + 1; nextIndex < visibleRows.length; nextIndex++) {
+                            const candidate = $(visibleRows[nextIndex]);
+                            if ((parseInt(candidate.attr('data-depth'), 10) || 0) <= depth) break;
+                            last = candidate;
+                        }
+                    }
+                    const top = parent.offset().top - containerOffset.top + 3;
+                    const bottom = last.offset().top - containerOffset.top + last.outerHeight() - 3;
+                    const left = 6 + (depth * 5);
+                    const right = 6 + (depth * 7);
+                    layer.append($('<div class="projectAssetHierarchyBox">').css({
+                        top: top + 'px',
+                        left: left + 'px',
+                        right: right + 'px',
+                        height: Math.max(12, bottom - top) + 'px',
+                        boxShadow: '0 ' + Math.min(5, 2 + depth) + 'px ' + Math.min(10, 6 + (depth * 2)) + 'px rgba(33, 37, 41, ' + Math.min(.19, .10 + (depth * .02)) + ')'
+                    }));
+                });
+            });
+        };
+
         // Collapse state lives in sessionStorage rather than the database. It is
         // a personal view preference and should not rearrange the job for other
         // planners. Filtering is applied last so hidden search results stay hidden.
@@ -291,14 +386,16 @@
                         .attr('title', isCollapsed ? 'Expand section' : 'Collapse section');
                     toggle.find('i').toggleClass('fa-folder-open', !isCollapsed).toggleClass('fa-folder', isCollapsed);
                     if (isCollapsed) collapsedAncestors.push(depth);
-                } else if (row.data('kind') === 'requirement') {
+                } else if (row.data('kind') === 'requirement' || row.data('kind') === 'direct') {
                     const isCollapsed = collapsedRequirementIds.indexOf(parseInt(row.data('id'), 10)) !== -1;
                     row.find('.projectAssetRequirementToggle').attr('aria-expanded', isCollapsed ? 'false' : 'true')
                         .attr('title', isCollapsed ? 'Expand allocated assets' : 'Collapse allocated assets')
                         .find('i').toggleClass('fa-box-open', !isCollapsed).toggleClass('fa-box', isCollapsed);
                 }
             });
+            window.refreshProjectAssetHierarchyBoxes();
         };
+        $(window).on('resize', window.refreshProjectAssetHierarchyBoxes);
         // Parent rows show affected asset counts; the clickable maintenance-job
         // links remain on the physical rows where the warning originates.
         function renderProjectAssetWarningSummary(container, blocked, flagged) {
@@ -306,12 +403,36 @@
             if (blocked) container.append($('<span class="badge badge-danger mr-1">').attr('title', blocked + ' blocked asset(s)').append('<i class="fas fa-ban mr-1"></i>', document.createTextNode(blocked)));
             if (flagged) container.append($('<span class="badge badge-warning">').attr('title', flagged + ' flagged asset(s)').append('<i class="far fa-flag mr-1"></i>', document.createTextNode(flagged)));
         }
+        function updateProjectAssetAvailabilityBadge(badge, status, label) {
+            const names = {'low-stock': 'Low stock', 'turnaround': 'Turnaround', 'shortage': 'Shortage', 'available': 'Available', 'unknown': 'Unknown'};
+            badge.text(names[status] || status).attr('title', label || '')
+                .toggleClass('badge-danger', status === 'shortage')
+                .toggleClass('badge-warning', status === 'turnaround' || status === 'low-stock')
+                .toggleClass('badge-success', status === 'available')
+                .toggleClass('badge-secondary', status === 'unknown');
+        }
         // Recalculate from requirement rows already in the DOM. Most edits are
         // background requests, so this avoids a full page load after every scan,
         // price change, drag or status update.
         window.refreshAssetRequirementSectionPackedTotals = function () {
             const severity = {'available': 0, 'unknown': 1, 'low-stock': 2, 'turnaround': 3, 'shortage': 4};
-            const rowColours = {'available': 'transparent', 'unknown': 'rgba(108, 117, 125, 0.10)', 'low-stock': 'rgba(255, 193, 7, 0.18)', 'turnaround': 'rgba(253, 126, 20, 0.18)', 'shortage': 'rgba(220, 53, 69, 0.18)'};
+            // Direct-assignment groups are display-only, so derive their packed
+            // count from the physical rows instead of the requirements API.
+            $('#projectAssetRequirementsTableBody > [data-kind="direct"]').each(function () {
+                const group = $(this);
+                let packed = 0;
+                const assets = $('#projectAssetRequirementsTableBody > .projectAssetPhysicalAsset[data-requirement-id="' + group.attr('data-id') + '"][data-linked="0"]');
+                assets.each(function () {
+                    const asset = $(this);
+                    const statuses = statusListForProjectAssetRow(asset);
+                    const current = statuses.findIndex(function (status) { return parseInt(status.assetsAssignmentsStatus_id, 10) === parseInt(asset.attr('data-status-id'), 10); });
+                    const packedIndex = statuses.findIndex(function (status) { return String(status.assetsAssignmentsStatus_name || '').toLowerCase() === 'packed'; });
+                    if (packedIndex !== -1 && current >= packedIndex) packed++;
+                });
+                const required = assets.length;
+                group.attr('data-required', required).find('.projectAssetStatusBadge').text(packed + ' / ' + required + ' packed')
+                    .toggleClass('badge-success', required > 0 && packed >= required).toggleClass('badge-secondary', required === 0 || packed < required);
+            });
             // Each section owns every deeper row until the outline returns to its
             // depth. This naturally includes nested subsections in parent totals.
             $('#projectAssetRequirementsTableBody > [data-kind="section"]').each(function () {
@@ -364,14 +485,14 @@
                 if (worstBadge) {
                     const status = worstBadge.data('availability-status');
                     sectionBadge.attr('data-availability-status', status)
-                        .attr('title', worstBadge.attr('title'))
-                    sectionRow.css('background-color', rowColours[status] || 'transparent');
+                        .attr('title', worstBadge.attr('title'));
+                    updateProjectAssetAvailabilityBadge(sectionRow.find('.projectAssetAvailabilityBadge'), status, worstBadge.attr('title'));
                 }
             });
             // The project summary counts requirement rows only. Section rows are
             // roll-ups of the same data and would otherwise double-count it.
             let summaryPacked = 0, summaryRequired = 0, summaryMass = 0, summaryUnknownMass = 0, summaryValue = 0, summaryUnknownValue = 0, summaryPrice = 0, summaryBlocks = 0, summaryFlags = 0, summaryShortages = 0;
-            $('#projectAssetRequirementsTableBody > [data-kind="requirement"]').each(function () {
+            $('#projectAssetRequirementsTableBody > [data-kind="requirement"], #projectAssetRequirementsTableBody > [data-kind="direct"]').each(function () {
                 const row = $(this);
                 summaryPacked += parseInt(row.find('.projectAssetRequirementPacked').text(), 10) || 0;
                 summaryRequired += parseInt(row.attr('data-required'), 10) || 0;
@@ -392,6 +513,7 @@
             $('#projectAssetSummaryBlocks').toggleClass('d-none', !summaryBlocks).html('<i class="fas fa-ban mr-1"></i>' + summaryBlocks + ' blocked');
             $('#projectAssetSummaryFlags').toggleClass('d-none', !summaryFlags).html('<i class="far fa-flag mr-1"></i>' + summaryFlags + ' flagged');
             $('#projectAssetSummaryShortages').toggleClass('d-none', !summaryShortages).html('<i class="fas fa-exclamation-triangle mr-1"></i>' + summaryShortages + ' shortages');
+            window.refreshProjectAssetHierarchyBoxes();
         };
         // Several API calls may finish together during bulk actions. Queue one
         // follow-up refresh rather than dropping it or starting parallel refreshes.
@@ -413,13 +535,14 @@
                 result.response.requirements.forEach(function (requirement) {
                     const row = $('#projectAssetRequirement' + requirement.id);
                     const badge = row.find('.projectAssetStatusBadge');
-                    row.attr('data-required', requirement.required).css('background-color', requirement.rowColour);
+                    row.attr('data-required', requirement.required);
                     badge.text(requirement.packed + ' / ' + requirement.required + ' packed')
                         .attr('title', requirement.availability.label)
                         .attr('data-availability-status', requirement.availability.status)
                         .data('availability-status', requirement.availability.status)
                         .toggleClass('badge-success', requirement.required > 0 && requirement.packed >= requirement.required)
                         .toggleClass('badge-secondary', requirement.required === 0 || requirement.packed < requirement.required);
+                    updateProjectAssetAvailabilityBadge(row.find('.projectAssetAvailabilityBadge'), requirement.availability.status, requirement.availability.label);
                 });
                 window.refreshAssetRequirementSectionPackedTotals();
             }).always(function () {
@@ -462,7 +585,7 @@
         // then restores matching parents so results retain their hierarchy.
         function projectAssetRowMatchesFilter(row, filter) {
             if (filter === 'all') return true;
-            if (row.attr('data-kind') === 'requirement') {
+            if (row.attr('data-kind') === 'requirement' || row.attr('data-kind') === 'direct') {
                 if (filter === 'shortage') return row.find('.projectAssetStatusBadge').attr('data-availability-status') === 'shortage';
                 if (filter === 'warnings') return (parseInt(row.attr('data-warning-blocks'), 10) || 0) > 0 || (parseInt(row.attr('data-warning-flags'), 10) || 0) > 0;
                 if (filter === 'unpacked') return (parseInt(row.find('.projectAssetRequirementPacked').text(), 10) || 0) < (parseInt(row.attr('data-required'), 10) || 0);
@@ -485,12 +608,12 @@
             const rows = $('#projectAssetRequirementsTableBody > tr[data-depth]');
             rows.removeClass('projectAssetFilterHidden').removeData('filter-include');
             if (!query && filter === 'all') return window.refreshAssetRequirementSections();
-            rows.filter('[data-kind="requirement"], [data-kind="asset"]').each(function () {
+            rows.filter('[data-kind="requirement"], [data-kind="direct"], [data-kind="asset"]').each(function () {
                 const row = $(this);
                 const textMatch = !query || row.text().toLowerCase().indexOf(query) !== -1;
                 row.data('filter-include', textMatch && projectAssetRowMatchesFilter(row, filter));
             });
-            rows.filter('[data-kind="requirement"]').each(function () {
+            rows.filter('[data-kind="requirement"], [data-kind="direct"]').each(function () {
                 const requirement = $(this);
                 if (requirement.data('filter-include')) return;
                 const childMatch = rows.filter('[data-kind="asset"][data-requirement-id="' + requirement.attr('data-id') + '"]').filter(function () { return $(this).data('filter-include'); }).length > 0;
@@ -523,7 +646,7 @@
                 const nameCell = cells.eq(1).clone();
                 nameCell.find('button, .projectAssetRequirementWarnings, .projectAssetSectionWarnings').remove();
                 result.push([
-                    kind === 'asset' ? 'Physical asset' : (kind === 'section' ? 'Section' : 'Asset Type requirement'),
+                    kind === 'asset' ? 'Physical asset' : (kind === 'section' ? 'Section' : (kind === 'direct' ? 'Directly assigned Asset Type' : 'Asset Type requirement')),
                     parseInt(row.attr('data-depth'), 10) || 0,
                     nameCell.clone().find('.projectAssetPhysicalDetails, .projectAssetRequirementNote').remove().end().text().replace(/\s+/g, ' ').trim(),
                     cells.eq(2).text().replace(/\s+/g, ' ').trim(), cells.eq(3).text().trim(), cells.eq(4).text().trim(),
@@ -542,19 +665,37 @@
         });
         $('#printProjectAssetRequirements').on('click', function () {
             const printable = $('<div>');
-            printable.append($('<h1>').text('{{ project.projects_name|e('js') }}'));
-            printable.append($('<h2>').text('Planned assets'));
-            printable.append($('#projectAssetRequirementSummary').clone().removeAttr('id'));
+            printable.append($('<header>').append($('<h1>').text('{{ project.projects_name|e('js') }}')).append($('<p>').text('Planned asset schedule')));
+            const summary = $('<div class="print-summary">');
+            [
+                ['Packed', $('#projectAssetSummaryPacked').text()],
+                ['Weight', $('#projectAssetSummaryMass').text()],
+                ['Replacement value', $('#projectAssetSummaryValue').text()],
+                ['Cost', $('#projectAssetSummaryPrice').text()]
+            ].forEach(function (item) {
+                summary.append($('<div>').append($('<span>').text(item[0])).append($('<strong>').text(item[1])));
+            });
+            printable.append(summary);
             // Work on a clone: interactive controls are useful on screen but make
             // a noisy loading sheet. All rows are printed even when collapsed.
             const table = $('#projectAssetRequirementsTableBody').closest('table').clone();
-            table.find('input, button, .dropdown, .sr-only').remove();
+            table.addClass('print-assets');
+            table.find('input, button, .dropdown, .sr-only, i').remove();
             table.find('tr').show();
-            table.find('tr').each(function () { $(this).children().first().remove(); $(this).children().last().remove(); });
+            table.find('tr').each(function () {
+                const row = $(this);
+                row.children().first().remove();
+                row.children().last().remove();
+                row.children().eq(0).css('padding-left', ((parseInt(row.attr('data-depth'), 10) || 0) * 14 + 8) + 'px');
+            });
+            table.find('thead th').first().text('Item / Asset');
+            table.find('.projectAssetRequirementSection').addClass('print-section');
+            table.find('.projectAssetRequirement').addClass('print-requirement');
+            table.find('.projectAssetPhysicalAsset').addClass('print-asset');
             printable.append(table);
             const printWindow = window.open('', '_blank');
             if (!printWindow) return bootbox.alert('Allow pop-ups to open the print view.');
-            printWindow.document.write('<!doctype html><html><head><title>Planned assets</title><style>body{font-family:Arial,sans-serif;margin:24px;color:#222}h1{margin-bottom:0}h2{margin-top:4px;color:#555}table{width:100%;border-collapse:collapse;font-size:11px;margin-top:16px}th,td{border:1px solid #ccc;padding:5px;text-align:left;vertical-align:top}.badge{padding:2px 4px;border:1px solid #999;border-radius:3px}.text-muted{color:#666}@media print{body{margin:0}}</style></head><body>' + printable.html() + '</body></html>');
+            printWindow.document.write('<!doctype html><html><head><title>Planned asset schedule</title><style>@page{size:A4 landscape;margin:12mm}*{box-sizing:border-box}body{font-family:Arial,sans-serif;margin:0;color:#20252a;font-size:10px;-webkit-print-color-adjust:exact;print-color-adjust:exact}header{border-bottom:2px solid #343a40;margin-bottom:12px;padding-bottom:7px}h1{font-size:22px;margin:0}header p{color:#6c757d;font-size:12px;margin:3px 0 0}.print-summary{display:flex;gap:8px;margin-bottom:12px}.print-summary div{background:#f1f3f5;border-radius:4px;min-width:120px;padding:6px 9px}.print-summary span{color:#6c757d;display:block;font-size:8px;text-transform:uppercase}.print-summary strong{display:block;font-size:11px;margin-top:2px}.print-assets{border-collapse:collapse;width:100%}.print-assets thead{display:table-header-group}.print-assets th{background:#343a40;color:#fff;font-size:9px;padding:6px;text-align:left}.print-assets td{border-bottom:1px solid #dfe3e6;padding:5px 6px;text-align:left;vertical-align:top}.print-assets tr{break-inside:avoid}.print-assets .print-section td{background:#dfe5ea!important;border-top:2px solid #adb5bd;font-weight:bold}.print-assets .print-requirement td{background:#f6f7f8}.print-assets .print-asset td:first-child{color:#495057}.badge{border:1px solid #adb5bd;border-radius:10px;display:inline-block;padding:2px 6px}.badge-success{background:#28a745;color:#fff}.badge-warning{background:#ffc107;color:#212529}.badge-danger{background:#dc3545;color:#fff}.badge-secondary{background:#6c757d;color:#fff}.text-muted{color:#6c757d}.d-none{display:none!important}a{color:inherit;text-decoration:none}</style></head><body>' + printable.html() + '</body></html>');
             printWindow.document.close(); printWindow.focus(); setTimeout(function () { printWindow.print(); }, 250);
         });
 
@@ -589,7 +730,7 @@
         function refreshProjectAssetBulkSelection() {
             const allRows = $('#projectAssetRequirementsTableBody > .projectAssetPhysicalAsset');
             const allRequirements = $('#projectAssetRequirementsTableBody > [data-kind="requirement"]');
-            $('#projectAssetRequirementsTableBody > [data-kind="requirement"]').each(function () {
+            $('#projectAssetRequirementsTableBody > [data-kind="requirement"], #projectAssetRequirementsTableBody > [data-kind="direct"]').each(function () {
                 const row = $(this);
                 const assetInputs = allRows.filter('[data-requirement-id="' + row.attr('data-id') + '"]').find('.projectAssetBulkAsset');
                 if (assetInputs.length) setAggregateCheckbox(row.find('.projectAssetBulkRequirement'), assetInputs);
@@ -682,8 +823,13 @@
                 group.each(function () {
                     const row = $(this);
                     row.attr('data-depth', (parseInt(row.attr('data-depth'), 10) || 0) + depthChange);
+                    if (row.hasClass('projectAssetPhysicalAsset')) {
+                        const depth = parseInt(row.attr('data-depth'), 10) || 0;
+                        row.children('td').eq(1).addClass('projectAssetNestedContent').css({'--asset-guide-left': (0.75 + ((depth - 1) * 1.25)) + 'rem', 'padding-left': (0.75 + (depth * 1.25)) + 'rem'});
+                    }
                 });
-                requirement.find('.projectAssetDragHandle').css('margin-left', (targetDepth * 1.5) + 'rem');
+                requirement.find('.projectAssetDragHandle').css('margin-left', 0);
+                requirement.find('.projectAssetOutlineContent').toggleClass('projectAssetNestedContent', targetDepth > 0).css({'--asset-guide-left': (0.75 + ((targetDepth - 1) * 1.25)) + 'rem', 'padding-left': (0.75 + (targetDepth * 1.25)) + 'rem'});
                 group.detach().insertAfter(destination);
                 destination = group.last();
             });
@@ -838,6 +984,7 @@
                 ajaxcall('projects/assets/unassign.php', {assetsAssignments: ids}, function () {
                     const requirements = {};
                     eligible.each(function () { requirements[$(this).attr('data-requirement-id')] = true; });
+                    if (Object.keys(requirements).some(function (id) { return parseInt(id, 10) < 0; })) return location.reload();
                     Object.keys(requirements).forEach(function (id) { loadAssetRequirementEditor(parseInt(id, 10)); });
                 }, false);
             });
@@ -881,10 +1028,12 @@
         // Individual row actions deliberately expose only adjacent workflow
         // states plus the convenient jump to Packed.
         function buildRequirementAssetActions(asset) {
-            {% if "PROJECTS:PROJECT_ASSETS:EDIT:ASSIGNMENT_STATUS"|instancePermissions %}
+            {% if "PROJECTS:PROJECT_ASSETS:EDIT:ASSIGNMENT_STATUS"|instancePermissions or "PROJECTS:PROJECT_ASSETS:CREATE:ASSIGN_AND_UNASSIGN"|instancePermissions %}
             const dropdown = $('<div class="dropdown">');
             dropdown.append('<button class="btn btn-sm btn-link text-muted" type="button" data-toggle="dropdown" aria-label="Asset actions"><i class="fas fa-ellipsis-v"></i></button>');
             const menu = $('<div class="dropdown-menu dropdown-menu-right">');
+            const options = [];
+            {% if "PROJECTS:PROJECT_ASSETS:EDIT:ASSIGNMENT_STATUS"|instancePermissions %}
             const rawStatuses = requirementAssetStatuses[asset.instances_id] || [];
             const statuses = Object.keys(rawStatuses).map(function (key) { return rawStatuses[key]; });
             const currentIndex = statuses.findIndex(function (status) {
@@ -893,7 +1042,6 @@
             const packedIndex = statuses.findIndex(function (status) {
                 return String(status.assetsAssignmentsStatus_name || '').toLowerCase() === 'packed';
             });
-            const options = [];
             if (currentIndex > 0) options.push({direction: 'Previous', icon: 'fa-arrow-left', status: statuses[currentIndex - 1]});
             if (currentIndex < statuses.length - 1) options.push({direction: 'Next', icon: 'fa-arrow-right', status: statuses[currentIndex + 1]});
             if (packedIndex > currentIndex + 1) options.push({direction: 'Jump to', icon: 'fa-box', status: statuses[packedIndex]});
@@ -907,12 +1055,16 @@
                 item.append(document.createTextNode(option.direction + ': ' + status.assetsAssignmentsStatus_name));
                 menu.append(item);
             });
+            {% endif %}
             {% if "PROJECTS:PROJECT_ASSETS:CREATE:ASSIGN_AND_UNASSIGN"|instancePermissions %}
             if (options.length) menu.append('<div class="dropdown-divider"></div>');
             menu.append($('<button class="dropdown-item editProjectPhysicalAsset" type="button"><i class="fas fa-edit mr-2"></i>Edit asset</button>')
                 .attr('data-assignment-id', asset.assetsAssignments_id));
-            {% elseif not "PROJECTS:PROJECT_ASSETS:EDIT:ASSIGNMENT_STATUS"|instancePermissions %}
-            dropdown.find('button[data-toggle="dropdown"]').prop('disabled', true);
+            const remove = $('<button class="dropdown-item text-danger removeProjectPhysicalAsset" type="button"><i class="fas fa-unlink mr-2"></i>Remove from job</button>')
+                .attr('data-assignment-id', asset.assetsAssignments_id)
+                .prop('disabled', !asset.canRemove);
+            if (!asset.canRemove) remove.attr('title', asset.isLinkedAsset ? 'Linked accessories are managed through their parent asset' : 'Packed assets and later statuses cannot be removed');
+            menu.append(remove);
             {% endif %}
             return dropdown.append(menu);
             {% else %}
@@ -928,8 +1080,21 @@
                 projectAssetRequirements_id: row.attr('data-requirement-id'),
                 assets_tag: row.attr('data-asset-tag'),
                 assetsAssignments_comment: row.attr('data-comment'),
-                isLinkedAsset: row.attr('data-linked') === '1'
+                isLinkedAsset: row.attr('data-linked') === '1',
+                canRemove: row.attr('data-can-remove') === '1'
             }));
+        });
+        $('#projectAssetRequirementsTableBody').on('click', '.removeProjectPhysicalAsset', function () {
+            const assignmentId = parseInt($(this).data('assignment-id'), 10);
+            const row = $('#projectAssetRequirementsTableBody > .projectAssetPhysicalAsset[data-assignment-id="' + assignmentId + '"]');
+            const requirementId = parseInt(row.attr('data-requirement-id'), 10);
+            bootbox.confirm('Remove ' + row.attr('data-asset-tag') + ' from this job?', function (confirmed) {
+                if (!confirmed) return;
+                ajaxcall('projects/assets/unassign.php', {assetsAssignments: [assignmentId]}, function () {
+                    if (requirementId < 0) return location.reload();
+                    loadAssetRequirementEditor(requirementId);
+                }, false);
+            });
         });
 
         // This doubles as the partial-row refresh used after allocation, removal
@@ -971,11 +1136,13 @@
                         .attr('data-asset-tag', asset.assets_tag)
                         .attr('data-comment', asset.assetsAssignments_comment || '')
                         .attr('data-linked', asset.isLinkedAsset ? '1' : '0')
+                        .attr('data-can-remove', asset.canRemove ? '1' : '0')
                         .attr('data-cross-instance', asset.sourceInstanceName ? '1' : '0')
                         .attr('data-linked-depth', asset.linkedDepth || 0)
                         .attr('data-depth', (parseInt(requirementRow.attr('data-depth'), 10) || 0) + 1 + (asset.linkedDepth || 0));
                     childRow.append($('<td>').append('<input type="checkbox" class="projectAssetBulkAsset" aria-label="Select allocated asset">'));
-                    childRow.append($('<td>').css('padding-left', (2 + ((asset.linkedDepth || 0) * 1.5)) + 'rem').append(
+                    const childDepth = (parseInt(requirementRow.attr('data-depth'), 10) || 0) + 1 + (asset.linkedDepth || 0);
+                    childRow.append($('<td class="projectAssetNestedContent">').css({'--asset-guide-left': (0.75 + ((childDepth - 1) * 1.25)) + 'rem', 'padding-left': (0.75 + (childDepth * 1.25)) + 'rem'}).append(
                         $('<i class="fas text-muted mr-2">').addClass(asset.isLinkedAsset ? 'fa-link' : 'fa-tag'),
                         $('<a>').attr('href', '{{ CONFIG.ROOTURL }}/asset.php?id=' + asset.assetTypes_id + '&asset=' + asset.assets_id + '&instance=' + asset.instances_id).text(asset.assets_tag),
                         asset.isLinkedAsset ? $('<span class="text-muted ml-2">').text(asset.assetTypes_name) : null,
@@ -1213,6 +1380,7 @@
             const assetRow = $('#projectAssetRequirementsTableBody > .projectAssetPhysicalAsset[data-assignment-id="' + assignmentId + '"]');
             const finishSave = function () {
                 $('#editProjectPhysicalAssetModal').modal('hide');
+                if (replacementId && requirementId < 0) return location.reload();
                 if (replacementId) loadAssetRequirementEditor(requirementId);
                 window.refreshProjectAssetRequirementStatuses();
             };

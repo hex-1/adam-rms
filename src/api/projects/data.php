@@ -92,7 +92,7 @@ function projectFinancials($project) {
     $DBLIB->orderBy("assetTypes.assetTypes_id", "ASC");
     $DBLIB->orderBy("assets.assets_tag", "ASC");
     $DBLIB->where("assets.assets_deleted", 0);
-    $assets = $DBLIB->get("assetsAssignments", null, ["assetCategories.assetCategories_rank","assetsAssignmentsStatus.assetsAssignmentsStatus_id", "assetsAssignmentsStatus.assetsAssignmentsStatus_order", "assetsAssignmentsStatus.assetsAssignmentsStatus_name","assetsAssignments.*", "manufacturers.manufacturers_name", "assetTypes.*", "assets.*", "assetCategories.assetCategories_name", "assetCategories.assetCategories_fontAwesome", "assetCategoriesGroups.assetCategoriesGroups_name", "assets.instances_id"]);
+    $assets = $DBLIB->get("assetsAssignments", null, ["assetCategories.assetCategories_rank","assetsAssignmentsStatus.assetsAssignmentsStatus_id", "assetsAssignmentsStatus.assetsAssignmentsStatus_order", "assetsAssignmentsStatus.assetsAssignmentsStatus_name","assetsAssignments.*", "manufacturers.manufacturers_name", "assetTypes.*", "assets.*", "assetCategories.assetCategories_name", "assetCategories.assetCategories_fontAwesome", "assetCategoriesGroups.assetCategoriesGroups_id", "assetCategoriesGroups.assetCategoriesGroups_name", "assets.instances_id"]);
 
     $return['assetsAssigned'] = [];
     $return['assetsAssignedSUB'] = [];
@@ -519,6 +519,136 @@ $walkOutline = function (int $parentId, int $depth, string $parentPath = '') use
     return $totals;
 };
 $outlineTotals = $walkOutline(0, 0);
+
+$directGroupsByCategory = [];
+// Assets added through AdamRMS's original assignment screen do not have a
+// projectAssetRequirements_id. Matching ones are consumed by planned rows
+// above; anything left must still be visible in the replacement assets list.
+foreach ($unlinkedAssignedAssetsByType as $typeId => $directAssets) {
+    if (!$directAssets) continue;
+    $firstAsset = $directAssets[0];
+    $rootCount = 0;
+    $totalMass = 0.0;
+    $unknownMassCount = 0;
+    $totalValue = 0;
+    $unknownValueCount = 0;
+    $blockedAssetCount = 0;
+    $flaggedAssetCount = 0;
+    $totalPrice = new Money(0, $projectCurrency);
+    foreach ($directAssets as $directAsset) {
+        if ((int) ($directAsset['linkedDepth'] ?? 0) === 0) $rootCount++;
+        $assetMass = $directAsset['assets_mass'] !== null ? $directAsset['assets_mass'] : ($directAsset['assetTypes_mass'] ?? null);
+        if ($assetMass === null || (float) $assetMass <= 0) $unknownMassCount++;
+        else $totalMass += (float) $assetMass;
+        $assetValue = $directAsset['assets_value'] !== null ? $directAsset['assets_value'] : ($directAsset['assetTypes_value'] ?? null);
+        if ($assetValue === null || (int) $assetValue <= 0) $unknownValueCount++;
+        else $totalValue += (int) $assetValue;
+        if (!empty($directAsset['flagsblocks']['COUNT']['BLOCK'])) $blockedAssetCount++;
+        if (!empty($directAsset['flagsblocks']['COUNT']['FLAG'])) $flaggedAssetCount++;
+        if (isset($directAsset['discountPrice'])) $totalPrice = $totalPrice->add($directAsset['discountPrice']);
+    }
+    if (!isset($packedRemainingByType[$typeId])) {
+        $packedRemainingByType[$typeId] = projectAssetRequirementPackedCount((int) $PAGEDATA['project']['projects_id'], (int) $typeId);
+    }
+    $packedCount = min($rootCount, $packedRemainingByType[$typeId]);
+    $packedRemainingByType[$typeId] = max(0, $packedRemainingByType[$typeId] - $packedCount);
+    $directGroup = array_merge($firstAsset, [
+        'isDirectAssignmentGroup' => true,
+        // Real requirement IDs are positive, so this remains a stable and
+        // unambiguous parent key for collapse and bulk-selection behaviour.
+        'projectAssetRequirements_id' => -(int) $typeId,
+        'projectAssetRequirements_quantity' => $rootCount,
+        'projectAssetRequirements_note' => null,
+        'projectAssetRequirements_discount' => 0,
+        'assignedAssets' => $directAssets,
+        'packedCount' => $packedCount,
+        'periodPrice' => new Money(0, $projectCurrency),
+        'totalPrice' => $totalPrice,
+        'totalMass' => $totalMass,
+        'unknownMassCount' => $unknownMassCount,
+        'totalValue' => $totalValue,
+        'unknownValueCount' => $unknownValueCount,
+        'blockedAssetCount' => $blockedAssetCount,
+        'flaggedAssetCount' => $flaggedAssetCount,
+        'availability' => ['status' => 'available', 'colour' => '#28a745', 'label' => 'Directly assigned', 'rowColour' => 'transparent'],
+    ]);
+    $categoryGroupId = (int) ($firstAsset['assetCategoriesGroups_id'] ?? 0);
+    $directGroupsByCategory[$categoryGroupId][] = ['kind' => 'direct', 'depth' => 1, 'requirement' => $directGroup];
+    $outlineTotals['packed'] += $packedCount;
+    $outlineTotals['required'] += $rootCount;
+    $outlineTotals['price'] += (int) $totalPrice->getAmount();
+    $outlineTotals['mass'] += $totalMass;
+    $outlineTotals['unknownMass'] += $unknownMassCount;
+    $outlineTotals['value'] += $totalValue;
+    $outlineTotals['unknownValue'] += $unknownValueCount;
+    $outlineTotals['blockedAssets'] += $blockedAssetCount;
+    $outlineTotals['flaggedAssets'] += $flaggedAssetCount;
+}
+
+// Direct assignments have no user-selected section. Reuse only a root-level
+// automatic category; a nested category belongs to its manual parent (such as
+// Stage A), so using it would make an arbitrary placement decision. If no root
+// category exists, render a display-only root category for these assignments.
+$placedDirectCategories = [];
+$categorisedOutline = [];
+foreach ($outline as $item) {
+    $categoryGroupId = $item['kind'] === 'section' && $item['depth'] === 0
+        ? (int) ($item['section']['assetCategoriesGroups_id'] ?? 0)
+        : 0;
+    if ($categoryGroupId && !empty($directGroupsByCategory[$categoryGroupId])) {
+        foreach ($directGroupsByCategory[$categoryGroupId] as $directItem) {
+            $requirement = $directItem['requirement'];
+            $item['packedCount'] += $requirement['packedCount'];
+            $item['requiredCount'] += $requirement['projectAssetRequirements_quantity'];
+            $item['totalPrice'] = $item['totalPrice']->add($requirement['totalPrice']);
+            $item['totalMass'] += $requirement['totalMass'];
+            $item['unknownMassCount'] += $requirement['unknownMassCount'];
+            $item['totalValue'] = $item['totalValue']->add(new Money($requirement['totalValue'], $projectCurrency));
+            $item['unknownValueCount'] += $requirement['unknownValueCount'];
+            $item['blockedAssetCount'] += $requirement['blockedAssetCount'];
+            $item['flaggedAssetCount'] += $requirement['flaggedAssetCount'];
+        }
+    }
+    $categorisedOutline[] = $item;
+    if ($categoryGroupId && !empty($directGroupsByCategory[$categoryGroupId])) {
+        foreach ($directGroupsByCategory[$categoryGroupId] as $directItem) $categorisedOutline[] = $directItem;
+        $placedDirectCategories[$categoryGroupId] = true;
+    }
+}
+foreach ($directGroupsByCategory as $categoryGroupId => $directItems) {
+    if (isset($placedDirectCategories[$categoryGroupId])) continue;
+    if (!$categoryGroupId) {
+        foreach ($directItems as $directItem) {
+            $directItem['depth'] = 0;
+            $categorisedOutline[] = $directItem;
+        }
+        continue;
+    }
+    $firstRequirement = $directItems[0]['requirement'];
+    $section = [
+        'projectAssetRequirementSections_id' => -(1000000 + (int) $categoryGroupId),
+        'projectAssetRequirementSections_name' => $firstRequirement['assetCategoriesGroups_name'] ?: 'Other',
+        'projectAssetRequirementSections_parent_id' => null,
+        'assetCategoriesGroups_id' => (int) $categoryGroupId,
+        'isDirectAssignmentSection' => true,
+    ];
+    $sectionItem = ['kind' => 'section', 'depth' => 0, 'section' => $section, 'packedCount' => 0, 'requiredCount' => 0, 'totalPrice' => new Money(0, $projectCurrency), 'totalValue' => new Money(0, $projectCurrency), 'unknownValueCount' => 0, 'totalMass' => 0.0, 'unknownMassCount' => 0, 'blockedAssetCount' => 0, 'flaggedAssetCount' => 0, 'availability' => ['status' => 'available', 'colour' => '#28a745', 'label' => 'Directly assigned']];
+    foreach ($directItems as $directItem) {
+        $requirement = $directItem['requirement'];
+        $sectionItem['packedCount'] += $requirement['packedCount'];
+        $sectionItem['requiredCount'] += $requirement['projectAssetRequirements_quantity'];
+        $sectionItem['totalPrice'] = $sectionItem['totalPrice']->add($requirement['totalPrice']);
+        $sectionItem['totalMass'] += $requirement['totalMass'];
+        $sectionItem['unknownMassCount'] += $requirement['unknownMassCount'];
+        $sectionItem['totalValue'] = $sectionItem['totalValue']->add(new Money($requirement['totalValue'], $projectCurrency));
+        $sectionItem['unknownValueCount'] += $requirement['unknownValueCount'];
+        $sectionItem['blockedAssetCount'] += $requirement['blockedAssetCount'];
+        $sectionItem['flaggedAssetCount'] += $requirement['flaggedAssetCount'];
+    }
+    $categorisedOutline[] = $sectionItem;
+    foreach ($directItems as $directItem) $categorisedOutline[] = $directItem;
+}
+$outline = $categorisedOutline;
 $PAGEDATA['project']['assetRequirementOutline'] = $outline;
 $PAGEDATA['project']['assetRequirementSectionOptions'] = $sectionOptions;
 $PAGEDATA['project']['assetRequirementSummary'] = [
@@ -529,13 +659,6 @@ $PAGEDATA['project']['assetRequirementSummary'] = [
     'blockedAssets' => $outlineTotals['blockedAssets'], 'flaggedAssets' => $outlineTotals['flaggedAssets'],
     'shortages' => $outlineTotals['shortages'],
 ];
-
-$DBLIB->where("assetTypes.instances_id", $AUTH->data['instance']['instances_id']);
-$DBLIB->join("manufacturers", "assetTypes.manufacturers_id=manufacturers.manufacturers_id", "LEFT");
-$DBLIB->orderBy("assetTypes.assetTypes_name", "ASC");
-$PAGEDATA['assetTypesForRequirements'] = $DBLIB->get("assetTypes", null, [
-    "assetTypes.assetTypes_id", "assetTypes.assetTypes_name", "assetTypes.manufacturers_id", "manufacturers.manufacturers_name",
-]);
 
 //Files
 $PAGEDATA['files'] = $bCMS->s3List(7, $PAGEDATA['project']['projects_id']);
