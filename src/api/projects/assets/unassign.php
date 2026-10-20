@@ -28,7 +28,15 @@ if (isset($_POST['assetTypes_id']) and isset($_POST['projects_id']) and !isset($
     else finish(false, ["message" => "Could not find Assignment"]);
 }
 
-$DBLIB->where('assetsAssignments_id', $_POST['assetsAssignments'], 'IN');
+// All paths above end at assignment ids. Normalise them before using an IN
+// clause so malformed scalar input cannot produce invalid SQL.
+$assignmentIds = $_POST['assetsAssignments'] ?? [];
+if (!is_array($assignmentIds)) $assignmentIds = [$assignmentIds];
+$assignmentIds = array_values(array_unique(array_filter(array_map('intval', $assignmentIds))));
+if (!$assignmentIds) finish(false, ['message' => 'No valid assignments supplied']);
+$_POST['assetsAssignments'] = $assignmentIds;
+
+$DBLIB->where('assetsAssignments_id', $assignmentIds, 'IN');
 $DBLIB->where('assetsAssignments_linkedTo', null, 'IS NOT');
 $directLinkedAssignment = $DBLIB->getOne('assetsAssignments', ['assetsAssignments_id']);
 if ($directLinkedAssignment) finish(false, ['message' => 'Linked accessories must be managed through their parent asset']);

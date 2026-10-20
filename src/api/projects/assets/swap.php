@@ -30,6 +30,8 @@ $DBLIB->where("projects.projects_archived", 0);
 $DBLIB->where('assets_deleted', 0);
 $currentAsset = $DBLIB->getone("assets", [
     'assets.*', 'assetsAssignments.assetsAssignments_id', 'assetsAssignments.assetsAssignments_linkedTo',
+    'assetsAssignments.projects_id', 'assetsAssignments.assetsAssignments_customPrice',
+    'assetsAssignments.assetsAssignments_discount',
     'assetsAssignmentsStatus.assetsAssignmentsStatus_name', 'assetsAssignmentsStatus.assetsAssignmentsStatus_order',
     'projects.projects_dates_deliver_start', 'projects.projects_dates_deliver_end',
 ]);
