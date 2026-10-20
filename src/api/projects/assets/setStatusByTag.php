@@ -50,12 +50,15 @@ if (!$assignment) {
     // original status transition in the background.
     finish(false, ["message" => "Asset is required but not yet assigned to project", "code" => "NOTASSIGNED", "assets_id" => $asset['assets_id']]);
 }
-if ($assignment['assetsAssignmentsStatus_id'] == $_POST['assetsAssignments_status']) finish(true, null, ["assets_id" => $asset['assets_id']]); // No change
 
+// Validate before the no-op check below, so a deleted status is always rejected even if the assignment already happens to be on it
 $DBLIB->where("assetsAssignmentsStatus_id", $_POST['assetsAssignments_status']);
 $DBLIB->where("instances_id", $asset['instances_id']); // Use the instance of the asset
+$DBLIB->where("assetsAssignmentsStatus_deleted", 0);
 $status = $DBLIB->getone("assetsAssignmentsStatus",["assetsAssignmentsStatus_id"]);
 if (!$status or $status['assetsAssignmentsStatus_id'] == null) finish(false, ["message" => "Status not found","code"=>"STATUSNOTFOUND"]);
+
+if ($assignment['assetsAssignmentsStatus_id'] == $_POST['assetsAssignments_status']) finish(true, null, ["assets_id" => $asset['assets_id']]); // No change
 
 $DBLIB->where("assetsAssignments_id", $assignment['assetsAssignments_id']);
 $update = $DBLIB->update("assetsAssignments", ["assetsAssignmentsStatus_id" => $status['assetsAssignmentsStatus_id']], 1);
