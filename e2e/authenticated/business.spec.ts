@@ -13,6 +13,22 @@ test("api/instances/switch.php only switches to the user's own businesses", asyn
   expect(mentions(list, b.marker)).toBe(false);
 });
 
+test("a newly created business becomes the active business", async ({ asA, tenants: { a } }) => {
+  const name = `E2E newly active business ${Date.now()}`;
+  const created = await asA.api("/api/instances/new.php", { instances_name: name, role: "Owner" });
+  expect(succeeded(created), created.body.slice(0, 300)).toBe(true);
+  const instanceId = Number(created.json.response.instanceid);
+
+  try {
+    const list = await asA.api("/api/instances/list.php");
+    expect(list.json.response).toContainEqual(expect.objectContaining({ instances_id: instanceId, this: true }));
+  } finally {
+    await asA.api("/api/instances/switch.php", { instances_id: a.instanceId });
+    dbQuery("UPDATE userInstances SET userInstances_deleted = 1 WHERE instancePositions_id IN (SELECT instancePositions_id FROM instancePositions WHERE instances_id = ?)", [instanceId]);
+    dbQuery("UPDATE instances SET instances_deleted = 1 WHERE instances_id = ?", [instanceId]);
+  }
+});
+
 test("api/instances/searchUser.php finds a user to add only by their exact email", async ({ asA, tenants: { a, b } }) => {
   // Adding someone from another business by their email address is how businesses share staff
   const exact = await asA.api("/api/instances/searchUser.php", { term: b.users.full.email });

@@ -146,7 +146,12 @@ foreach (["Pending pick", "Picked", "Prepping", "Tested", "Packed", "Dispatched"
     if (!$assignmentsStatus) finish(false, ["code" => "ADD-STATUS-FAIL", "message" => "Could not create new assignment status"]);
 }
 
-
+// The Auth object was built before this business and membership existed, so it
+// cannot select the new business during this request. Remember it explicitly
+// for the next page load instead of relying on a second redirect to discover it.
+$_SESSION['instanceID'] = (int) $instance;
+$DBLIB->where("users_userid", $PAGEDATA['USERDATA']['users_userid']);
+$DBLIB->update("users", ["users_selectedInstanceIDLast" => $instance], 1);
 
 finish(true, null, ["instanceid" => $instance]);
 
