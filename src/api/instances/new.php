@@ -2,6 +2,9 @@
 require_once __DIR__ . '/../apiHeadSecure.php';
 require_once __DIR__ . '/../../common/libs/Auth/instanceActions.php';
 if (($CONFIG["NEW_INSTANCE_ENABLED"] !== "Enabled" and !$AUTH->serverPermissionCheck("INSTANCES:CREATE")) or !isset($_POST['instances_name'])) die("404");
+$currency = !empty($_POST['instances_config_currency']) ? $_POST['instances_config_currency'] : 'GBP';
+//Every amount the business shows is formatted in this currency, so an unknown one would break its pages (and the server's list of businesses)
+if (!is_string($currency) or !(new \Money\Currencies\ISOCurrencies())->contains(new \Money\Currency($currency))) finish(false, ["code" => "PARAM-ERROR", "message" => "Unknown currency"]);
 
 $instance = $DBLIB->insert("instances", [
     "instances_name" => $_POST['instances_name'],
@@ -9,7 +12,7 @@ $instance = $DBLIB->insert("instances", [
     "instances_website" => $_POST['instances_website'],
     "instances_email" => $_POST['instances_email'],
     "instances_phone" => $_POST['instances_phone'],
-    "instances_config_currency" => !empty($_POST['instances_config_currency']) ? $_POST['instances_config_currency'] : 'GBP',
+    "instances_config_currency" => $currency,
     "instances_billingUser" => $PAGEDATA['USERDATA']['users_userid'],
     "instances_storageLimit" => 0,
     "instances_storageEnabled" => 1,
@@ -143,7 +146,12 @@ foreach (["Pending pick", "Picked", "Prepping", "Tested", "Packed", "Dispatched"
     if (!$assignmentsStatus) finish(false, ["code" => "ADD-STATUS-FAIL", "message" => "Could not create new assignment status"]);
 }
 
-
+// The Auth object was built before this business and membership existed, so it
+// cannot select the new business during this request. Remember it explicitly
+// for the next page load instead of relying on a second redirect to discover it.
+$_SESSION['instanceID'] = (int) $instance;
+$DBLIB->where("users_userid", $PAGEDATA['USERDATA']['users_userid']);
+$DBLIB->update("users", ["users_selectedInstanceIDLast" => $instance], 1);
 
 finish(true, null, ["instanceid" => $instance]);
 

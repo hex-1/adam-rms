@@ -32,6 +32,9 @@
                     <h3 class="card-title">Asset Status</h3>
                 </div>
                 <div class="card-body">
+                    <div class="alert alert-info">
+                        The first status is used when an asset is initially allocated to a project. Drag a different status to the top if your organisation starts its asset workflow at a different stage.
+                    </div>
                     <table class="table table-borderless" id="statusTable">
                         {% for status in USERDATA.instance['assetStatus'] %}
                             <tbody value="{{ status.assetsAssignmentsStatus_id }}">

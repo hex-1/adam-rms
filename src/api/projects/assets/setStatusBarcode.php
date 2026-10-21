@@ -11,7 +11,7 @@ if ($hasType) $DBLIB->where("assetsBarcodes.assetsBarcodes_type", $_POST['type']
 $DBLIB->where("assetsBarcodes.assetsBarcodes_deleted", 0);
 $DBLIB->where("assets.instances_id", $AUTH->data['instance']['instances_id']);
 $DBLIB->join("assets", "assets.assets_id=assetsBarcodes.assets_id", "LEFT");
-$barcode = $DBLIB->getone("assetsBarcodes", ["assetsBarcodes.assets_id", "assetsBarcodes.assetsBarcodes_id"]);
+$barcode = $DBLIB->getone("assetsBarcodes", ["assetsBarcodes.assets_id", "assetsBarcodes.assetsBarcodes_id", "assets.assetTypes_id"]);
 if ($barcode and $barcode['assets_id'] != null) {
     $scan = [
         "assetsBarcodes_id" => $barcode['assetsBarcodes_id'],
@@ -32,7 +32,32 @@ if ($barcode and $barcode['assets_id'] != null) {
     $currentAssignment = $DBLIB->getOne("assetsAssignments", ["assetsAssignments.assetsAssignments_id", "assetsAssignmentsStatus_id"]);
 
     if (!$currentAssignment) {
-        finish(false, ["message" => "Asset not assigned to project", "code" => "NOTASSIGNED", "assets_id" => $barcode['assets_id']]);
+        $freeScan = isset($_POST['freeScan']) && $_POST['freeScan'] === '1';
+        if (!$freeScan) {
+            // In guarded mode a scan is accepted only while this Asset Type
+            // still has an unfulfilled planned quantity.
+            $DBLIB->where("projects_id", $_POST['projects_id']);
+            $DBLIB->where("assetTypes_id", $barcode['assetTypes_id']);
+            $DBLIB->where("projectAssetRequirements_deleted", 0);
+            $requiredQuantity = (int) $DBLIB->getValue("projectAssetRequirements", "SUM(projectAssetRequirements_quantity)");
+
+            $DBLIB->where("assetsAssignments.projects_id", $_POST['projects_id']);
+            $DBLIB->where("assets.assetTypes_id", $barcode['assetTypes_id']);
+            $DBLIB->where("assetsAssignments.assetsAssignments_deleted", 0);
+            $DBLIB->join("assets", "assetsAssignments.assets_id=assets.assets_id", "LEFT");
+            $assignedQuantity = (int) $DBLIB->getValue("assetsAssignments", "COUNT(assetsAssignments.assetsAssignments_id)");
+
+            if ($requiredQuantity < 1 || $assignedQuantity >= $requiredQuantity) {
+                finish(false, [
+                    "message" => $requiredQuantity < 1 ? "This Asset Type is not required on this project" : "The planned quantity for this Asset Type is already fulfilled",
+                    "code" => "NOTREQUIRED",
+                    "assets_id" => $barcode['assets_id'],
+                ]);
+            }
+        }
+        // The client handles NOTASSIGNED by assigning the unit, then repeating
+        // the requested status change without interrupting the scan workflow.
+        finish(false, ["message" => "Asset is required but not yet assigned to project", "code" => "NOTASSIGNED", "assets_id" => $barcode['assets_id']]);
     }
 
     // If the assignment already has the requested status, treat this as success (no-op)
