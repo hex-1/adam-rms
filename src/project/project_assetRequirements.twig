@@ -18,6 +18,14 @@
     #projectAssetRequirementsTableBody > tr > td { background-color: transparent !important; }
     #projectAssetRequirementsTableBody > tr > td { border-top-color: transparent !important; }
     @media print { #projectAssetHierarchyBoxLayer { display: none; } }
+    #projectAssetRequirementActions .btn-tool {
+        color: #212529 !important;
+    }
+    #projectAssetRequirementActions .btn-tool:hover,
+    #projectAssetRequirementActions .btn-tool:focus {
+        color: #212529 !important;
+        font-weight: 700;
+    }
     #projectAssetRequirementsTableBody .projectAssetHierarchyGutter {
         min-width: 4.25rem;
         white-space: nowrap;
@@ -27,31 +35,17 @@
         display: inline-block;
         vertical-align: middle;
     }
-    #projectAssetRequirementsTableBody .projectAssetNestedContent {
-        position: relative;
-    }
-    #projectAssetRequirementsTableBody .projectAssetNestedContent::before {
-        border-bottom: 2px solid #c7cdd3;
-        border-left: 2px solid #c7cdd3;
-        border-radius: 0 0 0 .65rem;
-        content: "";
-        height: calc(50% + 1px);
-        left: var(--asset-guide-left);
-        position: absolute;
-        top: -1px;
-        width: .8rem;
-    }
 </style>
 <div class="card card-primary card-outline">
     <div class="card-header">
         <h3 class="card-title">Planned Asset Requirements</h3>
-        <div class="card-tools">
+        <div class="card-tools" id="projectAssetRequirementActions">
             <div class="btn-group mr-2" id="projectAssetBulkToolbar" style="display: none;">
                 <button type="button" class="btn btn-tool dropdown-toggle" data-toggle="dropdown"><i class="fas fa-tasks mr-1"></i><span id="projectAssetBulkCount">0 selected</span></button>
                 <div class="dropdown-menu dropdown-menu-right">
                     {% if "PROJECTS:PROJECT_ASSETS:EDIT:ASSIGNMENT_STATUS"|instancePermissions %}
-                    <button type="button" class="dropdown-item projectAssetBulkStatus" data-mode="previous"><i class="fas fa-arrow-left mr-2"></i>Previous status</button>
-                    <button type="button" class="dropdown-item projectAssetBulkStatus" data-mode="next"><i class="fas fa-arrow-right mr-2"></i>Next status</button>
+                    <button type="button" class="dropdown-item projectAssetBulkStatus" data-mode="previous"><i class="fas fa-arrow-left mr-2"></i><span>Previous status</span></button>
+                    <button type="button" class="dropdown-item projectAssetBulkStatus" data-mode="next"><i class="fas fa-arrow-right mr-2"></i><span>Next status</span></button>
                     <button type="button" class="dropdown-item projectAssetBulkStatus" data-mode="packed"><i class="fas fa-box mr-2"></i>Jump to Packed</button>
                     <button type="button" class="dropdown-item projectAssetBulkRequirementPacked" data-packed="0"><i class="fas fa-box-open mr-2"></i>Clear planned packed override</button>
                     <button type="button" class="dropdown-item projectAssetBulkChooseStatus"><i class="fas fa-list mr-2"></i>Choose status…</button>
@@ -81,11 +75,8 @@
             </button>
             {% endif %}
             {% if (project.assetRequirements or FINANCIALS.assetsAssigned or FINANCIALS.assetsAssignedSUB) and "PROJECTS:PROJECT_ASSETS:EDIT:ASSIGNMENT_STATUS"|instancePermissions %}
-            <button type="button" class="btn btn-tool" title="Quick Dispatch" data-toggle="modal" data-target="#quickDispatchModal">
-                <i class="fas fa-shipping-fast"></i> Quick Dispatch
-            </button>
-            <button type="button" class="btn btn-tool" title="Barcode Dispatch" data-toggle="modal" data-target="#barcodeDispatchModal">
-                <i class="fas fa-barcode"></i> Barcode Dispatch
+            <button type="button" class="btn btn-tool" title="Dispatch Assets" data-toggle="modal" data-target="#barcodeDispatchModal">
+                <i class="fas fa-barcode"></i> Dispatch Assets
             </button>
             {% endif %}
         </div>
@@ -349,16 +340,20 @@
                             last = candidate;
                         }
                     }
-                    const top = parent.offset().top - containerOffset.top + 3;
-                    const bottom = last.offset().top - containerOffset.top + last.outerHeight() - 3;
+                    const topInset = 3 + (depth * 2);
+                    const bottomInset = 3 + (depth * 4);
+                    const top = parent.offset().top - containerOffset.top + topInset;
+                    const bottom = last.offset().top - containerOffset.top + last.outerHeight() - bottomInset;
                     const left = 6 + (depth * 5);
                     const right = 6 + (depth * 7);
+                    const grey = Math.max(232, 249 - (depth * 5));
                     layer.append($('<div class="projectAssetHierarchyBox">').css({
                         top: top + 'px',
                         left: left + 'px',
                         right: right + 'px',
                         height: Math.max(12, bottom - top) + 'px',
-                        boxShadow: '0 ' + Math.min(5, 2 + depth) + 'px ' + Math.min(10, 6 + (depth * 2)) + 'px rgba(33, 37, 41, ' + Math.min(.19, .10 + (depth * .02)) + ')'
+                        backgroundColor: 'rgb(' + grey + ', ' + grey + ', ' + grey + ')',
+                        boxShadow: '0 ' + Math.min(4, 2 + depth) + 'px ' + Math.min(8, 5 + depth) + 'px rgba(33, 37, 41, ' + Math.min(.15, .08 + (depth * .015)) + ')'
                     }));
                 });
             });
@@ -396,6 +391,12 @@
             window.refreshProjectAssetHierarchyBoxes();
         };
         $(window).on('resize', window.refreshProjectAssetHierarchyBoxes);
+        // The assets list starts inside a hidden Bootstrap tab. Its rows have no
+        // measurable layout until the tab is shown, so draw the hierarchy then
+        // as well as during the normal initial refreshes and window resizes.
+        $('#nav-bar a[href="#assets-view"]').on('shown.bs.tab', function () {
+            window.refreshProjectAssetHierarchyBoxes();
+        });
         // Parent rows show affected asset counts; the clickable maintenance-job
         // links remain on the physical rows where the warning originates.
         function renderProjectAssetWarningSummary(container, blocked, flagged) {
@@ -754,7 +755,14 @@
             setAggregateCheckbox($('#projectAssetBulkAll'), selectable);
             const hasSelectedAssets = selectedProjectAssetRows().length > 0;
             const hasSelectedRequirements = selectedProjectRequirementRows().length > 0;
-            $('.projectAssetBulkStatus[data-mode="previous"], .projectAssetBulkStatus[data-mode="next"], .projectAssetBulkChooseStatus').prop('disabled', !hasSelectedAssets);
+            ['previous', 'next'].forEach(function (mode) {
+                const button = $('.projectAssetBulkStatus[data-mode="' + mode + '"]');
+                const transition = hasSelectedAssets ? bulkTransitionForSelectedAssets(mode) : null;
+                button.prop('disabled', !transition)
+                    .attr('data-target-status', transition ? transition.name.toLowerCase() : '')
+                    .find('span').text(transition ? 'Move to ' + transition.name : (mode === 'next' ? 'No later status' : 'No earlier status'));
+            });
+            $('.projectAssetBulkChooseStatus').prop('disabled', !hasSelectedAssets);
             $('.projectAssetBulkStatus[data-mode="packed"]').prop('disabled', !hasSelectedAssets && !hasSelectedRequirements);
             $('.projectAssetBulkRequirementPacked').prop('disabled', !hasSelectedRequirements);
             $('.projectAssetBulkEditRequirements').prop('disabled', !hasSelectedRequirements);
@@ -887,6 +895,32 @@
             const raw = requirementAssetStatuses[row.attr('data-instance-id')] || [];
             return Object.keys(raw).map(function (key) { return raw[key]; });
         }
+        function bulkTransitionForSelectedAssets(mode) {
+            let highest = null;
+            selectedProjectAssetRows().each(function () {
+                const row = $(this);
+                const statuses = statusListForProjectAssetRow(row);
+                const current = statuses.findIndex(function (status) {
+                    return parseInt(status.assetsAssignmentsStatus_id, 10) === parseInt(row.attr('data-status-id'), 10);
+                });
+                // The server normally resolves a NULL assignment to the first
+                // configured state. Keeping -1 as a fallback also lets an old
+                // fragment advance once if it was rendered before a refresh.
+                if (statuses.length && (!highest || current > highest.index)) highest = {index: current, statuses: statuses};
+            });
+            if (!highest) return null;
+            const targetIndex = highest.index + (mode === 'next' ? 1 : -1);
+            const target = highest.statuses[targetIndex];
+            if (!target) return null;
+            const targetName = String(target.assetsAssignmentsStatus_name || '').toLowerCase();
+            let supportedByAll = true;
+            selectedProjectAssetRows().each(function () {
+                if (!statusListForProjectAssetRow($(this)).some(function (status) {
+                    return String(status.assetsAssignmentsStatus_name || '').toLowerCase() === targetName;
+                })) supportedByAll = false;
+            });
+            return supportedByAll ? {name: target.assetsAssignmentsStatus_name} : null;
+        }
         function targetStatusForProjectAssetRow(row, mode, chosenName) {
             const statuses = statusListForProjectAssetRow(row);
             const current = statuses.findIndex(function (status) { return parseInt(status.assetsAssignmentsStatus_id, 10) === parseInt(row.attr('data-status-id'), 10); });
@@ -939,7 +973,8 @@
         }
         $('.projectAssetBulkStatus').on('click', function () {
             const mode = $(this).attr('data-mode');
-            applyProjectAssetBulkStatus(mode);
+            if (mode === 'previous' || mode === 'next') applyProjectAssetBulkStatus('chosen', $(this).attr('data-target-status'));
+            else applyProjectAssetBulkStatus(mode);
             if (mode === 'packed') setSelectedRequirementsPacked(true);
         });
         $('.projectAssetBulkRequirementPacked').on('click', function () { setSelectedRequirementsPacked(false); });

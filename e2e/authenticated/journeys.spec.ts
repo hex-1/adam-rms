@@ -47,9 +47,16 @@ test("adding an asset to a project from the assets page", async ({ page, asA, te
   await page.goto(`/project/?id=${project}`);
   await page.locator('a[href="#assets-view"]').click();
   await expect(page.locator("#assets-view")).toContainText(typeName);
+  await expect(page.locator("#projectAssetHierarchyBoxLayer .projectAssetHierarchyBox")).not.toHaveCount(0);
   await expect(page.locator("#projectAssetRequirementsCardBody")).toContainText(typeName);
   await expect(page.locator(".assetAssignmentCheckboxAll")).toHaveCount(0);
   await expect(page.locator(`a[href*="/assets.php?project=${project}"]`)).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Quick Dispatch" })).toHaveCount(0);
+  const dispatchButton = page.locator("#projectAssetRequirementActions").getByRole("button", { name: "Dispatch Assets" });
+  await expect(dispatchButton).toHaveCount(1);
+  await dispatchButton.click();
+  await expect(page.locator("#barcodeDispatchModal")).toBeVisible();
+  await expect(page.locator("#barcodeScanTextInputDispatch")).toBeVisible();
 });
 
 test("finding and adding a planned product from the project asset browser", async ({ page, asA, tenants: { a } }) => {
@@ -102,7 +109,7 @@ test("recording a payment from the project's Finance tab", async ({ page, asA, t
   await expect(page.locator("#payments-view")).toContainText("£12.50");
 });
 
-test("dispatching an asset on the Asset Dispatch board, with the arrows and by typing its tag", async ({ page, asA, tenants: { a } }) => {
+test("dispatching an asset on the Asset Dispatch board, with the arrows and the manual scanner", async ({ page, asA, tenants: { a } }) => {
   // Two statuses of our own, after the business's others, so the "»" arrow on the first goes to the second
   const statuses = ["Journey out", "Journey back"].map((name, i) => {
     dbQuery("INSERT INTO assetsAssignmentsStatus (instances_id, assetsAssignmentsStatus_name, assetsAssignmentsStatus_order, assetsAssignmentsStatus_deleted) VALUES (?, ?, ?, 0)",
@@ -126,10 +133,10 @@ test("dispatching an asset on the Asset Dispatch board, with the arrows and by t
     await expect(page.locator(`.assetDispatchAssetList[data-statusid="${statuses[1]}"]`)).toContainText(tag);
     await expect.poll(status).toBe(statuses[1]);
 
-    await page.locator("#navItemQuickDispatch button").click();
-    await page.locator(".assetStatusSelectorQuickDispatch:visible").selectOption(String(statuses[0]));
-    await page.locator("#assetTagQuickDispatch").fill(tag);
-    await page.locator("#goQuickDispatch").click();
+    await page.locator("#navItemBarcodeDispatch button").click();
+    await page.locator(".assetStatusSelectorBarcodeDispatch:visible").selectOption(String(statuses[0]));
+    await page.locator("#barcodeScanTextInputDispatch").fill(tag);
+    await page.locator("#barcodeScanTextButtonDispatch").click();
     await expect.poll(status).toBe(statuses[0]);
   } finally {
     dbQuery(`UPDATE assetsAssignmentsStatus SET assetsAssignmentsStatus_deleted = 1 WHERE assetsAssignmentsStatus_id IN (${statuses.join(",")})`);

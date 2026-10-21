@@ -19,6 +19,16 @@ test("an asset assigned without a planned requirement is shown in the new assets
   expect(page.status).toBe(200);
   expect(page.body).toContain("Directly assigned");
   expect(page.body).toContain(tag);
+  const [{ id: initialStatusId, name: initialStatusName }] = dbQuery<{ id: number; name: string }>(
+    `SELECT assetsAssignmentsStatus_id id, assetsAssignmentsStatus_name name
+       FROM assetsAssignmentsStatus
+      WHERE instances_id = ? AND assetsAssignmentsStatus_deleted = 0
+      ORDER BY assetsAssignmentsStatus_order, assetsAssignmentsStatus_id LIMIT 1`,
+    [a.instanceId],
+  );
+  expect(page.body).toContain(`data-status-id="${initialStatusId}"`);
+  expect(page.body).toContain(`class="badge projectAssetPhysicalStatus"`);
+  expect(page.body).toContain(`>${initialStatusName}</span>`);
   const category = `data-kind="section" data-id="-${1000000 + a.categoryGroupId}" data-depth="0"`;
   const assetType = `data-kind="direct" data-id="-${a.assetTypeId}" data-depth="1"`;
   expect(page.body).toContain(category);

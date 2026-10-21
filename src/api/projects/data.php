@@ -94,6 +94,28 @@ function projectFinancials($project) {
     $DBLIB->where("assets.assets_deleted", 0);
     $assets = $DBLIB->get("assetsAssignments", null, ["assetCategories.assetCategories_rank","assetsAssignmentsStatus.assetsAssignmentsStatus_id", "assetsAssignmentsStatus.assetsAssignmentsStatus_order", "assetsAssignmentsStatus.assetsAssignmentsStatus_name","assetsAssignments.*", "manufacturers.manufacturers_name", "assetTypes.*", "assets.*", "assetCategories.assetCategories_name", "assetCategories.assetCategories_fontAwesome", "assetCategoriesGroups.assetCategoriesGroups_id", "assetCategoriesGroups.assetCategoriesGroups_name", "assets.instances_id"]);
 
+    // An assignment with no explicit status is in the owning organisation's
+    // first workflow state. The dispatch board has always applied this rule;
+    // normalising the rows here makes every project asset view agree with it.
+    $initialStatuses = [];
+    foreach ($assets as &$asset) {
+        if ($asset['assetsAssignmentsStatus_id'] !== null) continue;
+        $instanceId = (int) $asset['instances_id'];
+        if (!array_key_exists($instanceId, $initialStatuses)) {
+            $DBLIB->where("instances_id", $instanceId);
+            $DBLIB->where("assetsAssignmentsStatus_deleted", 0);
+            $DBLIB->orderBy("assetsAssignmentsStatus_order", "ASC");
+            $DBLIB->orderBy("assetsAssignmentsStatus_id", "ASC");
+            $initialStatuses[$instanceId] = $DBLIB->getOne("assetsAssignmentsStatus", ["assetsAssignmentsStatus_id", "assetsAssignmentsStatus_order", "assetsAssignmentsStatus_name"]);
+        }
+        if ($initialStatuses[$instanceId]) {
+            $asset['assetsAssignmentsStatus_id'] = $initialStatuses[$instanceId]['assetsAssignmentsStatus_id'];
+            $asset['assetsAssignmentsStatus_order'] = $initialStatuses[$instanceId]['assetsAssignmentsStatus_order'];
+            $asset['assetsAssignmentsStatus_name'] = $initialStatuses[$instanceId]['assetsAssignmentsStatus_name'];
+        }
+    }
+    unset($asset);
+
     $return['assetsAssigned'] = [];
     $return['assetsAssignedSUB'] = [];
     $return['mass'] = 0.0; //TODO evaluate whether using floats for mass is a good idea....
